@@ -46,7 +46,7 @@ fn main() {
     let mut z80 = Z80::new();
     let mut bus = TestBus::new();
 
-    let code = std::fs::read("resources/zexdoc.cim").unwrap();
+    let code = std::fs::read("z80_core/resources/zexdoc.cim").unwrap();
     bus.load_code(0x100, &code);
 
     let mut cycles: usize = 0;

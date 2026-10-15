@@ -17,7 +17,7 @@ impl TestBus {
         }
     }
 
-    fn load_code(&mut self, start_addr: u16, code: &[u8]) {
+    fn _load_code(&mut self, start_addr: u16, code: &[u8]) {
         for (i, &byte) in code.iter().enumerate() {
             self.ram[(start_addr as usize) + i] = byte;
         }
