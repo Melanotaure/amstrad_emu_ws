@@ -1,5 +1,5 @@
-use rust_z80_emu::bus::SystemBus;
-use rust_z80_emu::z80::*;
+use z80_core::bus::SystemBus;
+use z80_core::z80::*;
 
 const MEMORY_SIZE: usize = 65_536;
 
@@ -40,24 +40,30 @@ impl SystemBus for TestBus {
         self.io_port[port as usize] = data;
     }
 }
-
 fn main() {
     let mut z80 = Z80::new();
     let mut bus = TestBus::new();
 
-    let code = std::fs::read("resources/multiply_u16.bin").unwrap();
+    let code = std::fs::read("resources/data_copy.bin").unwrap();
     bus.load_code(0, &code);
 
     let mut cycles: usize = 0;
+
+    println!("Memory contents at start:");
+    z80.memory_dump(0, 50, &mut bus);
+    println!("");
     z80.display_regs();
     println!("");
     loop {
         cycles += z80.execute(&mut bus) as usize;
         z80.display_regs();
         println!("");
-        if z80.reg.pc == 0x0019 {
+        if z80.reg.pc == 0x000B {
             break;
         }
     }
     println!("cycles: {}", cycles);
+
+    println!("Memory contents at stop:");
+    z80.memory_dump(0, 50, &mut bus);
 }

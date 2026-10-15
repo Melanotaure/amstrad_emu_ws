@@ -1,5 +1,6 @@
-use rust_z80_emu::bus::SystemBus;
-use rust_z80_emu::z80::*;
+// use std::io;
+use z80_core::bus::SystemBus;
+use z80_core::z80::*;
 
 const MEMORY_SIZE: usize = 65_536;
 
@@ -40,30 +41,34 @@ impl SystemBus for TestBus {
         self.io_port[port as usize] = data;
     }
 }
+
 fn main() {
     let mut z80 = Z80::new();
     let mut bus = TestBus::new();
 
-    let code = std::fs::read("resources/data_copy.bin").unwrap();
-    bus.load_code(0, &code);
+    let code = std::fs::read("resources/zexdoc.cim").unwrap();
+    bus.load_code(0x100, &code);
 
     let mut cycles: usize = 0;
+    z80.reg.pc = 0x0100_u16;
 
-    println!("Memory contents at start:");
-    z80.memory_dump(0, 50, &mut bus);
-    println!("");
-    z80.display_regs();
-    println!("");
     loop {
         cycles += z80.execute(&mut bus) as usize;
-        z80.display_regs();
-        println!("");
-        if z80.reg.pc == 0x000B {
+        if z80.reg.pc < 0x0005_u16 {
+            println!("\nCPU restarted!");
             break;
         }
+        if z80.n_halt == false {
+            println!("\nCPU halted!");
+            break;
+        }
+
+        // z80.memory_dump(0x0000, 0x22ff);
+        // println!("");
+        // z80.display_regs();
+
+        // let mut input = String::new();
+        // io::stdin().read_line(&mut input).unwrap();
     }
     println!("cycles: {}", cycles);
-
-    println!("Memory contents at stop:");
-    z80.memory_dump(0, 50, &mut bus);
 }

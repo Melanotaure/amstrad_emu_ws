@@ -1,0 +1,14 @@
+[package]
+authors = ["Luc Gaborit <luc.gaborit@gmail.com>"]
+name = "z80-core"
+version = "0.1.0"
+edition = "2021"
+description = "A Z80 CPU emulator core"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[dev-dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"

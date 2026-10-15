@@ -1,6 +1,6 @@
-use rust_z80_emu::bus::SystemBus;
-use rust_z80_emu::z80::*;
 use std::io;
+use z80_core::bus::SystemBus;
+use z80_core::z80::*;
 
 const MEMORY_SIZE: usize = 65_536;
 
