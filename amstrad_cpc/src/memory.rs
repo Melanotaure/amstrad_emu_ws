@@ -72,6 +72,14 @@ impl Memory {
         self.ram[ram_base_index + offset]
     }
 
+    pub fn read_byte_direct(&self, addr: u16) -> u8 {
+        let window = (addr >> 14) as usize;
+        let offset = (addr & 0x3FFF) as usize;
+
+        let ram_base_index = self.ram_offsets[window];
+        self.ram[ram_base_index + offset]
+    }
+
     pub fn write_byte(&mut self, addr: u16, val: u8) {
         let window = (addr >> 14) as usize;
         let offset = (addr & 0x3FFF) as usize;
