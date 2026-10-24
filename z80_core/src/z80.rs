@@ -27,6 +27,7 @@ pub struct Z80 {
     pub n_reset: bool,
     pub iff1: bool,
     pub iff2: bool,
+    pub ei_delay_flag: bool,
     pub im: InterruptMode,
     // CPU bus control
     pub n_busrq: bool,
@@ -54,6 +55,7 @@ impl Z80 {
             n_reset: true,
             iff1: false,
             iff2: false,
+            ei_delay_flag: false,
             im: InterruptMode::IM_0,
             n_busrq: true,
             n_busack: true,

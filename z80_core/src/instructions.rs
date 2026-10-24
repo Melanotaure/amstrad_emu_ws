@@ -1499,8 +1499,7 @@ impl Z80 {
             }
             // EI
             0xFB => {
-                self.iff1 = true;
-                self.iff2 = true;
+                self.ei_delay_flag = true;
                 self.reg.flags.alu = false;
             }
             // Special instructions
@@ -1513,6 +1512,13 @@ impl Z80 {
         if self.p_inst == 0xDD || self.p_inst == 0xFD {
             cycles += CYCLES_DD_FD[instr as usize];
         }
+
+        if self.p_inst != 0xFB && self.ei_delay_flag {
+            self.iff1 = true;
+            self.iff2 = true;
+            self.ei_delay_flag = false;
+        }
+
         self.p_inst = instr;
         self.reg.inc_pc();
         cycles
