@@ -5,6 +5,15 @@ pub struct GateArray {
     pub pens_rgb: [u32; 16],
     pub border_rgb: u32,
 
+    // Interrupt management
+    pub line_counter: u8,
+    pub vsync_delay: u8,
+    pub interrupt_pending: bool,
+
+    prev_hsync: bool,
+    prev_vsync: bool,
+
+    // Video LUTs
     lut_mode0: [[u8; 2]; 256],
     lut_mode1: [[u8; 4]; 256],
     lut_mode2: [[u8; 8]; 256],
@@ -17,10 +26,60 @@ impl GateArray {
             selected_pen: 0,
             pens_rgb: [0; 16],
             border_rgb: 0,
+            line_counter: 0,
+            vsync_delay: 0,
+            interrupt_pending: false,
+            prev_hsync: false,
+            prev_vsync: false,
             lut_mode0: Self::build_lut_mode0(),
             lut_mode1: Self::build_lut_mode1(),
             lut_mode2: Self::build_lut_mode2(),
         }
+    }
+
+    /// Called at each CRTC cycle (1 µs) with the current sync signals
+    pub fn update_sync(&mut self, hsync: bool, vsync: bool) {
+        // VSYNC rising edge detection
+        if vsync && !self.prev_vsync {
+            self.vsync_delay = 2;
+        }
+
+        // HSYNC falling edge detection
+        if !hsync && self.prev_hsync {
+            self.line_counter += 1;
+
+            if self.vsync_delay > 0 {
+                self.vsync_delay -= 1;
+
+                if self.vsync_delay == 0 {
+                    // 2 HSYNC occurred since the start of VSYNC:
+                    // if bit 5 is reset (<32), let's trigger an interrupt
+                    if (self.line_counter & 0x20) == 0 {
+                        self.interrupt_pending = true;
+                    }
+                    self.line_counter = 0;
+                }
+            } else if self.line_counter >= 52 {
+                // Normal cycle every 52 lines
+                self.line_counter = 0;
+                self.interrupt_pending = true;
+            }
+        }
+
+        self.prev_hsync = hsync;
+        self.prev_vsync = vsync;
+    }
+
+    /// Called when Z80 sends the command %10xxxxxx with bit 4 set
+    pub fn clear_interrupt_counter(&mut self) {
+        self.line_counter = 0;
+        self.interrupt_pending = false;
+    }
+
+    /// Called by the Z80 exactly when it acknowledge the interrupt (INTA)
+    pub fn acknowledge_interrupt(&mut self) {
+        self.interrupt_pending = false;
+        self.line_counter &= 0x1F; // resets bit 5
     }
 
     /// Called when the Z80 send %10xxxxxxx

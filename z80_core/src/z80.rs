@@ -1,3 +1,5 @@
+use std::vec;
+
 use crate::bus::SystemBus;
 use crate::registers::Registers;
 
@@ -86,6 +88,45 @@ impl Z80 {
         self._clock = 0;
     }
 
+    pub fn handle_interrupt(&mut self, bus: &mut impl SystemBus, data_bus: u8) -> u8 {
+        if !self.iff1 || self.ei_delay_flag {
+            return 0;
+        }
+
+        if !self.n_halt {
+            self.n_halt = true;
+            self.reg.inc_pc();
+        }
+
+        self.iff1 = false;
+        self.iff2 = false;
+
+        match self.im {
+            InterruptMode::IM_0 => 13,
+            InterruptMode::IM_1 => {
+                let [pcl, pch] = self.reg.pc.to_le_bytes();
+                self.reg.dec_sp();
+                bus.write_memory(self.reg.sp, pch);
+                self.reg.dec_sp();
+                bus.write_memory(self.reg.sp, pcl);
+                self.reg.pc = 0x0038;
+                13
+            }
+            InterruptMode::IM_2 => {
+                // Vectorized mode: pointer = (I << 8) | data_bus
+                let [pcl, pch] = self.reg.pc.to_le_bytes();
+                self.reg.dec_sp();
+                bus.write_memory(self.reg.sp, pch);
+                self.reg.dec_sp();
+                bus.write_memory(self.reg.sp, pcl);
+                let vector_addr = ((self.reg.i as u16) << 8) | (data_bus as u16);
+                let low = bus.read_memory(vector_addr);
+                let high = bus.read_memory(vector_addr.wrapping_add(1));
+                self.reg.pc = u16::from_le_bytes([low, high]);
+                19
+            }
+        }
+    }
     pub fn display_regs(&self) {
         println!("PC: {:04X} SP: {:04X}", self.reg.pc, self.reg.sp);
         println!(

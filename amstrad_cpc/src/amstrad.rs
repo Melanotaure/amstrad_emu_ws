@@ -1,6 +1,7 @@
 use crate::crtc_6845::Crtc;
 use crate::gate_array::GateArray;
 use crate::memory::Memory;
+use crate::ppi_8255::Ppi8255;
 use crate::video::{Framebuffer, SCREEN_WIDTH};
 use z80_core::bus::SystemBus;
 
@@ -9,6 +10,8 @@ pub struct AmstradCpc6128 {
     pub crtc: Crtc,
     pub gate_array: GateArray,
     pub framebuffer: Framebuffer,
+    pub ppi: Ppi8255,
+    pub current_vsync: bool, // Updated at each video cycle
 }
 
 impl AmstradCpc6128 {
@@ -18,6 +21,8 @@ impl AmstradCpc6128 {
             crtc: Crtc::new(),
             gate_array: GateArray::new(),
             framebuffer: Framebuffer::new(),
+            ppi: Ppi8255::new(),
+            current_vsync: false,
         }
     }
 
@@ -57,6 +62,7 @@ impl AmstradCpc6128 {
                 }
             }
         }
+        self.current_vsync = crtc_output.vsync;
         self.framebuffer.beam_x += 16;
     }
 
@@ -84,14 +90,24 @@ impl SystemBus for AmstradCpc6128 {
     // --- I/O PORTS ROUTING ---
 
     fn read_io(&mut self, port: u16) -> u8 {
-        // For now, no readable component.
+        // PPI decoding: A11 = 0
+        if (port & 0x0800) == 0 {
+            return self.ppi.read_io(port, self.current_vsync);
+        }
+
+        // CRTC decoding: A14 = 0
+        if (port & 0x4000) == 0 {
+            // Read CRTC registers if necessary
+            return 0xFF;
+        }
+
         // Usually, on Amstrad, a non-connected port returns 0xFF
         0xFF
     }
 
     fn write_io(&mut self, port: u16, data: u8) {
         // 1. Gate Array decoding (usual port @0x7Fxx)
-        // Rule: bit 15 reset, bit 14 set
+        // Rule: A15 = 0,  A14 = 1
         if (port & 0xC000) == 0x4000 {
             match data & 0xC0 {
                 0x00 => {
@@ -108,9 +124,12 @@ impl SystemBus for AmstradCpc6128 {
                     // Bit 2 (0=Enable, 1=Disable Lower ROM)
                     self.memory.upper_rom_enabled = (data & 0x08) == 0;
                     self.memory.lower_rom_enabled = (data & 0x04) == 0;
-
-                    // TODO: also send 'data' to the GateArray to manage the Video Mode
                     self.gate_array.set_video_mode(data & 0x03);
+
+                    // Bit 4: manual reset of the interrupt counter
+                    if (data & 0x10) != 0 {
+                        self.gate_array.clear_interrupt_counter();
+                    }
                 }
                 0xC0 => {
                     // Command %11xxxxxx: 128 Ko RAM paging (0xC0 to 0xC7)
@@ -120,14 +139,18 @@ impl SystemBus for AmstradCpc6128 {
             }
         }
         // 2. Upper ROM selection decoding (usual port: 0xDF00)
-        // Rule: bit 13 reset
-        else if (port & 0x2000) == 0 {
+        // Rule: A13 = 0
+        if (port & 0x2000) == 0 {
             // Amstrad manages 16 ROM slots only
             self.memory.active_upper_rom = (data & 0x0F) as usize;
         }
         // 3. CRTC 6845: A14 = 0 (usual ports: 0xBCxx and 0xBDxx)
-        else if (port & 0x4000) == 0 {
+        if (port & 0x4000) == 0 {
             self.crtc.write_io(port, data);
+        }
+        // 4. PPI 8255: A11 = 0
+        if (port & 0x0800) == 0 {
+            self.ppi.write_io(port, data);
         }
     }
 }

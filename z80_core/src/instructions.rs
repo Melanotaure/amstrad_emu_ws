@@ -440,6 +440,11 @@ impl Z80 {
 
     // Main function to run the CPU's instructions
     pub fn execute<B: SystemBus>(&mut self, bus: &mut B) -> u8 {
+        // Interrupt management befor instruction
+        if !self.n_int && self.iff1 && !self.ei_delay_flag {
+            return self.handle_interrupt(bus, 0xFF);
+        }
+
         let instr = bus.read_memory(self.reg.pc);
         let mut cycles = CYCLES[instr as usize];
 
@@ -1495,10 +1500,13 @@ impl Z80 {
             0xF3 => {
                 self.iff1 = false;
                 self.iff2 = false;
+                self.ei_delay_flag = false;
                 self.reg.flags.alu = false;
             }
             // EI
             0xFB => {
+                self.iff1 = true;
+                self.iff2 = true;
                 self.ei_delay_flag = true;
                 self.reg.flags.alu = false;
             }
@@ -1514,13 +1522,25 @@ impl Z80 {
         }
 
         if self.p_inst != 0xFB && self.ei_delay_flag {
-            self.iff1 = true;
-            self.iff2 = true;
             self.ei_delay_flag = false;
         }
 
+        // A non maskable interrupt is pending
+        let nmi = !self.n_nmi;
+        if !self.n_nmi {
+            self.iff2 = self.iff1;
+            self.iff1 = false;
+
+            self.rst(0x0066, bus);
+            self.n_nmi = true;
+        }
+
         self.p_inst = instr;
-        self.reg.inc_pc();
+        // If current instruction is HALT, stay on HALT instruction
+        // Except if an NMI occured.
+        if instr != 0x76 || nmi {
+            self.reg.inc_pc();
+        }
         cycles
     }
 }
