@@ -2,6 +2,7 @@ use crate::crtc_6845::Crtc;
 use crate::gate_array::GateArray;
 use crate::memory::Memory;
 use crate::ppi_8255::Ppi8255;
+use crate::psg_ay::PsgAy;
 use crate::video::{Framebuffer, SCREEN_WIDTH};
 use z80_core::bus::SystemBus;
 
@@ -12,6 +13,7 @@ pub struct AmstradCpc6128 {
     pub framebuffer: Framebuffer,
     pub ppi: Ppi8255,
     pub current_vsync: bool, // Updated at each video cycle
+    pub psg: PsgAy,
 }
 
 impl AmstradCpc6128 {
@@ -23,6 +25,7 @@ impl AmstradCpc6128 {
             framebuffer: Framebuffer::new(),
             ppi: Ppi8255::new(),
             current_vsync: false,
+            psg: PsgAy::new(),
         }
     }
 
@@ -73,6 +76,19 @@ impl AmstradCpc6128 {
         let column = (ma & 0x03FF) << 1;
 
         base | line | column
+    }
+
+    fn sync_psg(&mut self) {
+        let bdir = (self.ppi.port_c & 0x80) != 0; // bit 7
+        let bc1 = (self.ppi.port_c & 0x40) != 0; // bit 6
+        let line = (self.ppi.port_c & 0x0F) as usize; // Bits 0..3 (Keyboard lines)
+
+        let psg_output = self.psg.update_bus(bdir, bc1, self.ppi.port_a_out, line);
+
+        // If the PSG emits a piece of data (reading), it arrives on the PPI port A
+        if let Some(data) = psg_output {
+            self.ppi.port_a_in = data;
+        }
     }
 }
 
@@ -151,6 +167,7 @@ impl SystemBus for AmstradCpc6128 {
         // 4. PPI 8255: A11 = 0
         if (port & 0x0800) == 0 {
             self.ppi.write_io(port, data);
+            self.sync_psg();
         }
     }
 }

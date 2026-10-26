@@ -1,5 +1,3 @@
-use std::vec;
-
 use crate::bus::SystemBus;
 use crate::registers::Registers;
 
