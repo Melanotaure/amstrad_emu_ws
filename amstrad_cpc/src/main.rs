@@ -15,7 +15,7 @@ use amstrad_cpc::keyboard::map_key_to_matrix;
 use amstrad_cpc::video::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use z80_core::z80::*;
 
-const CYCLES_PER_FRAME: u32 = 80_000; // 4 MHz / 50 Hz (Image Rate for PAL standard)
+const CYCLES_PER_FRAME: u32 = 79_872; // 4 MHz / 50 Hz (Image Rate for PAL standard)
 const FRAME_DURATION: Duration = Duration::from_millis(20); // 1000 ms / 50 fps = 20 ms
 
 const DISPLAY_WIDTH: u32 = SCREEN_WIDTH as u32;
@@ -26,6 +26,7 @@ struct EmulatorApp {
     amstrad: AmstradCpc6128,
 
     next_frame_time: Instant,
+    cycle_remainder: u32,
 
     window: Option<Rc<Window>>,
     surface: Option<Surface<Rc<Window>, Rc<Window>>>,
@@ -37,32 +38,40 @@ impl EmulatorApp {
             cpu,
             amstrad,
             next_frame_time: Instant::now() + FRAME_DURATION,
+            cycle_remainder: 0,
             window: None,
             surface: None,
         }
     }
 
     fn run_one_frame(&mut self) {
-        let mut cycles_this_frame = 0;
-        self.amstrad.framebuffer.reset_beam();
+        // On démarre avec les éventuels cycles de débordement de la trame précédente
+        let mut cycles_this_frame = self.cycle_remainder;
 
         while cycles_this_frame < CYCLES_PER_FRAME {
             self.cpu.n_int = !self.amstrad.gate_array.interrupt_pending;
 
-            let raw_cylces = self.cpu.execute(&mut self.amstrad) as u32;
+            // 1. Exécution d'une instruction Z80
+            let raw_cycles = self.cpu.execute(&mut self.amstrad);
 
+            // Acquittement matériel si le Z80 vient de prendre l'interruption
             if !self.cpu.n_int && !self.cpu.iff1 {
                 self.amstrad.gate_array.acknowledge_interrupt();
             }
 
-            let aligned_cycles = (raw_cylces + 3) & !3;
+            // Alignement sur 4 T-states (1 µs = 1 cycle Gate Array / CRTC)
+            let aligned_cycles = ((raw_cycles + 3) & !3) as u32;
             cycles_this_frame += aligned_cycles;
 
+            // 2. Avancement de la vidéo d'autant de microsecondes
             let video_steps = aligned_cycles / 4;
             for _ in 0..video_steps {
                 self.amstrad.step_video();
             }
         }
+
+        // Sauvegarde du surplus (0, 4, 8... T-states) pour garder un timing parfait
+        self.cycle_remainder = cycles_this_frame - CYCLES_PER_FRAME;
     }
 }
 

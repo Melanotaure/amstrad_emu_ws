@@ -3,7 +3,7 @@ use crate::gate_array::GateArray;
 use crate::memory::Memory;
 use crate::ppi_8255::Ppi8255;
 use crate::psg_ay::PsgAy;
-use crate::video::{Framebuffer, SCREEN_WIDTH};
+use crate::video::Framebuffer;
 use z80_core::bus::SystemBus;
 
 pub struct AmstradCpc6128 {
@@ -30,26 +30,31 @@ impl AmstradCpc6128 {
     }
 
     pub fn step_video(&mut self) {
+        // 1. Le CRTC avance d'1 µs
         let crtc_output = self.crtc.clock();
+        self.current_vsync = crtc_output.vsync;
 
-        if crtc_output.hsync {
-            self.framebuffer.beam_y += 1;
-            self.framebuffer.beam_x = 0;
+        // 2. Mise à jour du compteur d'interruptions du Gate Array
+        self.gate_array
+            .update_sync(crtc_output.hsync, crtc_output.vsync);
 
-            // Interruption Logic
-        }
+        // 3. Synchronisation de la position X/Y du faisceau sur le moniteur
+        self.framebuffer
+            .sync_beam(crtc_output.hsync, crtc_output.vsync);
 
+        // 4. Dessin de la zone active ou de la bordure
         if crtc_output.display_enable {
-            let ram_address = self.calculate_video_address(crtc_output.ma, crtc_output.ra);
-            let byte_even = self.memory.read_byte_direct(ram_address);
-            let byte_odd = self.memory.read_byte_direct(ram_address + 1);
-            let pens_even = self.gate_array.decode_byte(byte_even);
-            let pens_odd = self.gate_array.decode_byte(byte_odd);
+            let addr = self.calculate_video_address(crtc_output.ma, crtc_output.ra);
+            let byte1 = self.memory.read_byte_direct(addr);
+            let byte2 = self.memory.read_byte_direct(addr.wrapping_add(1));
 
-            let mut all_pens = [0_u8; 16];
-            let len_even = pens_even.len();
-            all_pens[..len_even].copy_from_slice(pens_even);
-            all_pens[len_even..(len_even + pens_odd.len())].copy_from_slice(pens_odd);
+            let pens1 = self.gate_array.decode_byte(byte1);
+            let pens2 = self.gate_array.decode_byte(byte2);
+
+            let mut all_pens = [0u8; 16];
+            let len1 = pens1.len();
+            all_pens[..len1].copy_from_slice(pens1);
+            all_pens[len1..(len1 + pens2.len())].copy_from_slice(pens2);
 
             self.framebuffer.push_16_pixels(
                 self.gate_array.video_mode,
@@ -57,16 +62,10 @@ impl AmstradCpc6128 {
                 &self.gate_array.pens_rgb,
             );
         } else {
-            let border_color = self.gate_array.border_rgb;
-            for i in 0..16 {
-                let idx = self.framebuffer.beam_y * SCREEN_WIDTH + self.framebuffer.beam_x + i;
-                if idx < self.framebuffer.pixels.len() {
-                    self.framebuffer.pixels[idx] = border_color;
-                }
-            }
+            // Hors de la zone d'affichage, le Gate Array émet la couleur de bordure
+            self.framebuffer
+                .push_16_border_pixels(self.gate_array.border_rgb);
         }
-        self.current_vsync = crtc_output.vsync;
-        self.framebuffer.beam_x += 16;
     }
 
     #[inline(always)]

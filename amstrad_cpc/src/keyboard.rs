@@ -27,21 +27,21 @@ pub const fn map_key_to_matrix(key: KeyCode) -> Option<(usize, usize)> {
 
         // --- LINE 2 : Edition & Modficators ---
         KeyCode::Delete => Some((2, 0)), // Clr (mapped on Suppr)
-        KeyCode::BracketLeft => Some((2, 1)), // [
+        KeyCode::BracketRight => Some((2, 1)), // [
         KeyCode::Enter => Some((2, 2)),  // Main Return
-        KeyCode::BracketRight => Some((2, 3)), // ]
+        KeyCode::Backslash => Some((2, 3)), // ]
         KeyCode::Numpad4 => Some((2, 4)), // f4
         KeyCode::ShiftLeft | KeyCode::ShiftRight => Some((2, 5)), // Shift
-        KeyCode::Backslash => Some((2, 6)), // \
+        KeyCode::Backquote => Some((2, 6)), // \
         KeyCode::ControlLeft | KeyCode::ControlRight => Some((2, 7)), // Control
 
         // --- LINE 3 : Righthand Punctuation & P ---
-        KeyCode::Equal => Some((3, 0)), // ^
-        KeyCode::Minus => Some((3, 1)), // -
-        KeyCode::Quote => Some((3, 2)), // @
+        KeyCode::Equal => Some((3, 0)),       // ^
+        KeyCode::Minus => Some((3, 1)),       // -
+        KeyCode::BracketLeft => Some((3, 2)), // @
         KeyCode::KeyP => Some((3, 3)),
-        KeyCode::Semicolon => Some((3, 4)), // ; (M on AZERTY)
-        KeyCode::Backquote => Some((3, 5)), // :
+        KeyCode::Quote => Some((3, 4)),     // ; (M on AZERTY)
+        KeyCode::Semicolon => Some((3, 5)), // :
         KeyCode::Slash => Some((3, 6)),     // /
         KeyCode::Period => Some((3, 7)),    // .
 
