@@ -57,6 +57,7 @@ impl EmulatorApp {
             // Acquittement matériel si le Z80 vient de prendre l'interruption
             if !self.cpu.n_int && !self.cpu.iff1 {
                 self.amstrad.gate_array.acknowledge_interrupt();
+                self.cpu.n_int = true;
             }
 
             // Alignement sur 4 T-states (1 µs = 1 cycle Gate Array / CRTC)
@@ -140,7 +141,11 @@ impl ApplicationHandler for EmulatorApp {
                         let (dst_even, dst_odd) = dst_pair.split_at_mut(SCREEN_WIDTH);
 
                         dst_even.copy_from_slice(src_line);
-                        dst_odd.copy_from_slice(src_line);
+                        //dst_odd.copy_from_slice(src_line);
+
+                        for (dst_pixel, &src_pixel) in dst_odd.iter_mut().zip(src_line.iter()) {
+                            *dst_pixel = src_pixel - ((src_pixel >> 2) & 0x003F3F3F);
+                        }
                     }
 
                     // Ultra-fast direct copy of our Vec<u32> to the window
