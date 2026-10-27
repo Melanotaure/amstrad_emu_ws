@@ -1,7 +1,8 @@
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroU32;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use amstrad_cpc::dsk::DiskImage;
 use softbuffer::{Context, Surface};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -21,9 +22,6 @@ const FRAME_DURATION: Duration = Duration::from_millis(20); // 1000 ms / 50 fps 
 
 const DISPLAY_WIDTH: u32 = SCREEN_WIDTH as u32;
 const DISPLAY_HEIGHT: u32 = (SCREEN_HEIGHT * 2) as u32; // 576 pixels
-
-const SAMPLES_PER_FRAME: u32 = 960;
-const CYCLES_PER_SAMPLE: u32 = CYCLES_PER_FRAME / SAMPLES_PER_FRAME;
 
 struct EmulatorApp {
     cpu: Z80,
@@ -221,6 +219,8 @@ fn main() {
         .memory
         .load_upper_rom(7, "amstrad_cpc/roms/amsdos.rom")
         .expect("AMSDOS ROM not found");
+
+    amstrad.fdc.disk = DiskImage::load("amstrad_cpc/roms/FruityFrank.dsk").ok();
 
     let cpu = Z80::new();
 

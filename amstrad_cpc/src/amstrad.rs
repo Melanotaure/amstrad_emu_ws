@@ -1,4 +1,5 @@
 use crate::crtc_6845::Crtc;
+use crate::fdc_765::Fdc765;
 use crate::gate_array::GateArray;
 use crate::memory::Memory;
 use crate::ppi_8255::Ppi8255;
@@ -14,6 +15,7 @@ pub struct AmstradCpc6128 {
     pub ppi: Ppi8255,
     pub current_vsync: bool, // Updated at each video cycle
     pub psg: PsgAy,
+    pub fdc: Fdc765,
 }
 
 impl AmstradCpc6128 {
@@ -26,6 +28,7 @@ impl AmstradCpc6128 {
             ppi: Ppi8255::new(),
             current_vsync: false,
             psg: PsgAy::new(sample_rate),
+            fdc: Fdc765::new(),
         }
     }
 
@@ -116,6 +119,21 @@ impl SystemBus for AmstradCpc6128 {
             return 0xFF;
         }
 
+        // Décodage FDC (A10 = 0, A8 = 1) -> typiquement 0xFBxx
+        if (port & 0x0500) == 0x0100 {
+            if (port & 0x0001) == 0 {
+                // Bit A0 = 0 -> Main Status Register (0xFB7E)
+                let msr = self.fdc.read_msr();
+                // println!("[FDC IN] Lecture MSR = 0x{:02X}", msr);
+                return msr;
+            } else {
+                // Bit A0 = 1 -> Data Register (0xFB7F)
+                let data = self.fdc.read_data();
+                // println!("[FDC IN] Lecture DATA = 0x{:02X}", data);
+                return data;
+            }
+        }
+
         // Usually, on Amstrad, a non-connected port returns 0xFF
         0xFF
     }
@@ -167,6 +185,28 @@ impl SystemBus for AmstradCpc6128 {
         if (port & 0x0800) == 0 {
             self.ppi.write_io(port, data);
             self.sync_psg();
+        }
+
+        // Décodage Moteur Disquette (A10 = 0, A8 = 0) -> typiquement 0xFAxx
+        if (port & 0x0500) == 0x0000 {
+            // Le bit 0 contrôle l'alimentation du moteur
+            let motor_state = (data & 0x01) != 0;
+            self.fdc.motor_on = motor_state;
+            // println!(
+            //     "[FDC OUT] Moteur -> {}",
+            //     if motor_state { "ALLUMÉ" } else { "ÉTEINT" }
+            // );
+            return;
+        }
+
+        // Décodage FDC (A10 = 0, A8 = 1) -> typiquement 0xFBxx
+        if (port & 0x0500) == 0x0100 {
+            // Le MSR est en lecture seule, on ne traite donc que le registre de Data (A0 = 1)
+            if (port & 0x0001) != 0 {
+                //println!("[FDC OUT] Écriture DATA = 0x{:02X}", data);
+                self.fdc.write_data(data);
+            }
+            return;
         }
     }
 }

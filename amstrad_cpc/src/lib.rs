@@ -1,6 +1,8 @@
 pub mod amstrad;
 pub mod audio;
 pub mod crtc_6845;
+pub mod dsk;
+pub mod fdc_765;
 pub mod gate_array;
 pub mod keyboard;
 pub mod memory;
