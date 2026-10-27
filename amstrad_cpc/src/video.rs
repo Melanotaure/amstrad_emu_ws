@@ -28,13 +28,13 @@ impl Framebuffer {
 
     /// Synchronize the beam with the CRTC signals at the beginning of each cycle (1 µs)
     pub fn sync_beam(&mut self, hsync: bool, vsync: bool) {
-        // 1. HSYNC rising edge: the starts back at the very left of the tube
+        // 1. HSYNC rising edge: the beam starts back at the very left of the tube
         if hsync && !self.prev_hsync {
             self.h_cycle = 0;
             self.v_line += 1;
         }
 
-        // 2. VSYNC rising edge : the starts back at the very top of the tube
+        // 2. VSYNC rising edge : the beam starts back at the very top of the tube
         if vsync && !self.prev_vsync {
             self.v_line = 0;
         }

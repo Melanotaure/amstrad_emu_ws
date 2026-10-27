@@ -1,5 +1,16 @@
+use std::collections::VecDeque;
+
 use crate::bus::SystemBus;
 use crate::registers::Registers;
+
+#[derive(Clone)]
+pub struct TraceEntry {
+    pub pc: u16,
+    pub opcode: u8,
+    pub sp: u16,
+    pub a: u8,
+    pub f: u8,
+}
 
 #[allow(nonstandard_style)]
 pub enum InterruptMode {
@@ -36,6 +47,9 @@ pub struct Z80 {
     pub p_inst: u8,
     // Added the clock pin but might not be used
     pub _clock: u64,
+
+    pub trace: VecDeque<TraceEntry>,
+    pub boot_finished: bool,
 }
 
 impl Z80 {
@@ -61,6 +75,8 @@ impl Z80 {
             n_busack: true,
             p_inst: 0,
             _clock: 0_u64,
+            trace: VecDeque::with_capacity(100),
+            boot_finished: false,
         }
     }
 
@@ -148,5 +164,26 @@ impl Z80 {
         for addr in (start_address..=end_address).step_by(16) {
             println!("{:04X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}", addr, bus.read_memory(addr), bus.read_memory(addr+1), bus.read_memory(addr+2), bus.read_memory(addr+3), bus.read_memory(addr+4), bus.read_memory(addr+5), bus.read_memory(addr+6), bus.read_memory(addr+7), bus.read_memory(addr+8), bus.read_memory(addr+9), bus.read_memory(addr+10), bus.read_memory(addr+11), bus.read_memory(addr+12), bus.read_memory(addr+13), bus.read_memory(addr+14), bus.read_memory(addr+15));
         }
+    }
+
+    pub fn dump_trace(&self, bus: &mut impl SystemBus) {
+        println!("\n================ CRASH LOG ================");
+        println!("The last 100 executed instructions:");
+
+        for (i, entry) in self.trace.iter().enumerate() {
+            let p1 = bus.read_memory(entry.pc.wrapping_add(1));
+            let p2 = bus.read_memory(entry.pc.wrapping_add(2));
+
+            println!(
+                "[-{:03}] PC: 0x{:04X} | Opcode: {:02X} {:02X} {:02X} | SP: 0x{:04X} | A: {:02X} | F: {:02X}",
+                self.trace.len() - i,
+                entry.pc,
+                entry.opcode, p1, p2,
+                entry.sp,
+                entry.a,
+                entry.f,
+            );
+        }
+        println!("===========================================\n");
     }
 }

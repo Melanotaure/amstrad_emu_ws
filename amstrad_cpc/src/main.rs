@@ -8,7 +8,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::PhysicalKey;
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
 use amstrad_cpc::amstrad::AmstradCpc6128;
@@ -146,6 +146,11 @@ impl ApplicationHandler for EmulatorApp {
                     },
                 ..
             } => {
+                if keycode == KeyCode::F12 && state == ElementState::Pressed {
+                    println!("--- MANUAL TRACE DUMP TRIGGERED ---");
+                    self.cpu.dump_trace(&mut self.amstrad);
+                }
+
                 if let Some((line, bit)) = map_key_to_matrix(keycode) {
                     let is_pressed = state == ElementState::Pressed;
                     self.amstrad.psg.set_key_state(line, bit, is_pressed);

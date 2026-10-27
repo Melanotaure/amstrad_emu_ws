@@ -122,11 +122,13 @@ impl Crtc {
             0x00 => {
                 // Port 0xBCxx : Register selection (only 5 bits are useful, so max val 31)
                 self.selected_register = (value & 0x1F) as usize;
+                // println!("[CRTC] Sélection du Registre R{}", self.selected_register);
             }
             0x01 => {
                 // Port 0xBDxx : Data writing
                 if self.selected_register < 18 {
                     self.registers[self.selected_register] = value;
+                    // println!("[CRTC] Écriture Donnée = 0x{:02X}", value);
                 }
             }
             _ => {

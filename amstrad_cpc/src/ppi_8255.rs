@@ -40,6 +40,7 @@ impl Ppi8255 {
                 // 0x7E = 0b01111110 (bits 1..6 set for UK/FR 50Hz Amstrad)
                 let base = 0x7E;
                 if vsync {
+                    // println!("[PPI] Read VSYNC ON");
                     base | 0x01
                 } else {
                     base

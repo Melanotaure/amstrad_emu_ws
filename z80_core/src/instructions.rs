@@ -451,6 +451,27 @@ impl Z80 {
         // Increment R register at each instruction
         self.reg.inc_r();
 
+        let af = self.reg.get_af();
+        self.trace.push_back(TraceEntry {
+            pc: self.reg.pc,
+            opcode: instr,
+            sp: self.reg.sp,
+            a: (af >> 8) as u8,
+            f: (af & 0xFF) as u8,
+        });
+        if self.trace.len() > 100 {
+            self.trace.pop_front();
+        }
+
+        // Crash detection
+        if self.reg.pc > 0x0100 {
+            self.boot_finished = true;
+        }
+        if self.boot_finished && self.reg.pc == 0x0000 {
+            self.dump_trace(bus);
+            panic!("CRASH DETECTED: Z80 brutal reboot!");
+        }
+
         match instr {
             // NOP
             0x00 => self.reg.flags.alu = false,

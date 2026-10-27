@@ -1,7 +1,3 @@
-// src/amstrad/dsk.rs
-use std::fs::File;
-use std::io::{Read, Result};
-
 pub struct Sector {
     pub cylinder: u8,
     pub head: u8,

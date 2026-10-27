@@ -6,9 +6,9 @@ use crate::dsk::DiskImage;
 enum FdcState {
     Idle,
     ReadingCommand,
-    ExecutionRead,  // Le Z80 lit les données du secteur
-    ExecutionWrite, // Le Z80 écrit des données vers le secteur
-    Result,         // Le Z80 lit les octets de statut (ST0, ST1...)
+    ExecutionRead,   // Le Z80 lit les données du secteur
+    _ExecutionWrite, // Le Z80 écrit des données vers le secteur
+    Result,          // Le Z80 lit les octets de statut (ST0, ST1...)
 }
 
 pub struct Fdc765 {
