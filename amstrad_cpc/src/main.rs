@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -11,6 +11,7 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
 
 use amstrad_cpc::amstrad::AmstradCpc6128;
+use amstrad_cpc::audio::AudioSystem;
 use amstrad_cpc::keyboard::map_key_to_matrix;
 use amstrad_cpc::video::{SCREEN_HEIGHT, SCREEN_WIDTH};
 use z80_core::z80::*;
@@ -21,6 +22,9 @@ const FRAME_DURATION: Duration = Duration::from_millis(20); // 1000 ms / 50 fps 
 const DISPLAY_WIDTH: u32 = SCREEN_WIDTH as u32;
 const DISPLAY_HEIGHT: u32 = (SCREEN_HEIGHT * 2) as u32; // 576 pixels
 
+const SAMPLES_PER_FRAME: u32 = 960;
+const CYCLES_PER_SAMPLE: u32 = CYCLES_PER_FRAME / SAMPLES_PER_FRAME;
+
 struct EmulatorApp {
     cpu: Z80,
     amstrad: AmstradCpc6128,
@@ -30,10 +34,16 @@ struct EmulatorApp {
 
     window: Option<Rc<Window>>,
     surface: Option<Surface<Rc<Window>, Rc<Window>>>,
+
+    audio: AudioSystem,
+    audio_cycle_accumulator: f32,
+    cycles_per_sample: f32,
 }
 
 impl EmulatorApp {
-    fn new(cpu: Z80, amstrad: AmstradCpc6128) -> Self {
+    fn new(cpu: Z80, amstrad: AmstradCpc6128, audio: AudioSystem) -> Self {
+        let cycles_per_sample = 4_000_000.0 / audio.sample_rate;
+
         Self {
             cpu,
             amstrad,
@@ -41,6 +51,9 @@ impl EmulatorApp {
             cycle_remainder: 0,
             window: None,
             surface: None,
+            audio,
+            audio_cycle_accumulator: 0.0,
+            cycles_per_sample,
         }
     }
 
@@ -63,6 +76,18 @@ impl EmulatorApp {
             // Alignement sur 4 T-states (1 µs = 1 cycle Gate Array / CRTC)
             let aligned_cycles = ((raw_cycles + 3) & !3) as u32;
             cycles_this_frame += aligned_cycles;
+            self.audio_cycle_accumulator += aligned_cycles as f32;
+
+            while self.audio_cycle_accumulator >= self.cycles_per_sample {
+                self.audio_cycle_accumulator -= self.cycles_per_sample;
+
+                let sample = self.amstrad.psg.generate_sample();
+
+                if self.audio.producer.free_len() >= 2 {
+                    let _ = self.audio.producer.push(sample);
+                    let _ = self.audio.producer.push(sample);
+                }
+            }
 
             // 2. Avancement de la vidéo d'autant de microsecondes
             let video_steps = aligned_cycles / 4;
@@ -73,6 +98,7 @@ impl EmulatorApp {
 
         // Sauvegarde du surplus (0, 4, 8... T-states) pour garder un timing parfait
         self.cycle_remainder = cycles_this_frame - CYCLES_PER_FRAME;
+        // self.audio_cycle_accumulator = cycles_since_last_sample;
     }
 }
 
@@ -180,7 +206,9 @@ impl ApplicationHandler for EmulatorApp {
 }
 
 fn main() {
-    let mut amstrad = AmstradCpc6128::new();
+    let audio = AudioSystem::new();
+
+    let mut amstrad = AmstradCpc6128::new(audio.sample_rate);
     amstrad
         .memory
         .load_lower_rom("amstrad_cpc/roms/os6128.rom")
@@ -197,7 +225,7 @@ fn main() {
     let cpu = Z80::new();
 
     let event_loop = EventLoop::new().expect("Can't init EventLoop");
-    let mut app = EmulatorApp::new(cpu, amstrad);
+    let mut app = EmulatorApp::new(cpu, amstrad, audio);
 
     event_loop
         .run_app(&mut app)

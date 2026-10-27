@@ -17,7 +17,7 @@ pub struct AmstradCpc6128 {
 }
 
 impl AmstradCpc6128 {
-    pub fn new() -> Self {
+    pub fn new(sample_rate: f32) -> Self {
         Self {
             memory: Memory::new(),
             crtc: Crtc::new(),
@@ -25,7 +25,7 @@ impl AmstradCpc6128 {
             framebuffer: Framebuffer::new(),
             ppi: Ppi8255::new(),
             current_vsync: false,
-            psg: PsgAy::new(),
+            psg: PsgAy::new(sample_rate),
         }
     }
 

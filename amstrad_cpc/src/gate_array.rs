@@ -38,38 +38,6 @@ impl GateArray {
     }
 
     /// Called at each CRTC cycle (1 µs) with the current sync signals
-    // pub fn update_sync(&mut self, hsync: bool, vsync: bool) {
-    //     // VSYNC rising edge detection
-    //     if vsync && !self.prev_vsync {
-    //         self.vsync_delay = 2;
-    //     }
-
-    //     // HSYNC falling edge detection
-    //     if !hsync && self.prev_hsync {
-    //         self.line_counter += 1;
-
-    //         if self.vsync_delay > 0 {
-    //             self.vsync_delay -= 1;
-
-    //             if self.vsync_delay == 0 {
-    //                 // 2 HSYNC occurred since the start of VSYNC:
-    //                 // if bit 5 is reset (<32), let's trigger an interrupt
-    //                 if (self.line_counter & 0x20) == 0 {
-    //                     self.interrupt_pending = true;
-    //                 }
-    //                 self.line_counter = 0;
-    //             }
-    //         } else if self.line_counter >= 52 {
-    //             // Normal cycle every 52 lines
-    //             self.line_counter = 0;
-    //             self.interrupt_pending = true;
-    //         }
-    //     }
-
-    //     self.prev_hsync = hsync;
-    //     self.prev_vsync = vsync;
-    // }
-
     pub fn update_sync(&mut self, hsync: bool, vsync: bool) {
         // FRONT MONTANT DE VSYNC : Synchronisation absolue
         if vsync && !self.prev_vsync {

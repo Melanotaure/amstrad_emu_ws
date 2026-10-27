@@ -1,4 +1,5 @@
 pub mod amstrad;
+pub mod audio;
 pub mod crtc_6845;
 pub mod gate_array;
 pub mod keyboard;
