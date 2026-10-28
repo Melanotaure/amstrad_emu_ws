@@ -39,13 +39,13 @@ impl GateArray {
 
     /// Called at each CRTC cycle (1 µs) with the current sync signals
     pub fn update_sync(&mut self, hsync: bool, vsync: bool) {
-        // FRONT MONTANT DE VSYNC : Synchronisation absolue
+        // VSYNC RISING EDGE: Absolute Sync
         if vsync && !self.prev_vsync {
             self.line_counter = 0;
-            self.interrupt_pending = true; // Force l'interruption pour l'OS !
+            self.interrupt_pending = true; // Force the interrupt for the OS!
         }
 
-        // FRONT DESCENDANT DE HSYNC : Comptage normal des lignes
+        // HSYNC FALLING EDGE: Normal line count
         if !hsync && self.prev_hsync {
             self.line_counter += 1;
             if self.line_counter == 52 {
@@ -91,7 +91,7 @@ impl GateArray {
         } else if self.selected_pen == 16 {
             self.border_rgb = rgb_value;
         }
-        // Si select_pen > 16, la commande est ignorée sur un vrai CPC
+        // If select_pen > 16, ignore on a true CPC
     }
 
     fn build_lut_mode0() -> [[u8; 2]; 256] {
@@ -126,7 +126,7 @@ impl GateArray {
         let mut lut = [[0; 8]; 256];
         for b in 0..=255 {
             for i in 0..8 {
-                // Pixel 0 prend le bit 7, Pixel 7 prend le bit 0
+                // Pixel 0 takes bit 7, Pixel 7 takes bit 0
                 lut[b as usize][i] = (b >> (7 - i)) & 1;
             }
         }

@@ -119,17 +119,17 @@ impl SystemBus for AmstradCpc6128 {
             return 0xFF;
         }
 
-        // Décodage FDC (A10 = 0, A8 = 1) -> typiquement 0xFBxx
+        // FDC decoding (A10 = 0, A8 = 1) -> typically 0xFBxx
         if (port & 0x0500) == 0x0100 {
             if (port & 0x0001) == 0 {
                 // Bit A0 = 0 -> Main Status Register (0xFB7E)
                 let msr = self.fdc.read_msr();
-                // println!("[FDC IN] Lecture MSR = 0x{:02X}", msr);
+                // println!("[FDC IN] Read MSR = 0x{:02X}", msr);
                 return msr;
             } else {
                 // Bit A0 = 1 -> Data Register (0xFB7F)
                 let data = self.fdc.read_data();
-                // println!("[FDC IN] Lecture DATA = 0x{:02X}", data);
+                // println!("[FDC IN] Read DATA = 0x{:02X}", data);
                 return data;
             }
         }
@@ -187,23 +187,23 @@ impl SystemBus for AmstradCpc6128 {
             self.sync_psg();
         }
 
-        // Décodage Moteur Disquette (A10 = 0, A8 = 0) -> typiquement 0xFAxx
+        // Disquette Motor decoding (A10 = 0, A8 = 0) -> typically 0xFAxx
         if (port & 0x0500) == 0x0000 {
-            // Le bit 0 contrôle l'alimentation du moteur
+            // bit 0 controls the motor power
             let motor_state = (data & 0x01) != 0;
             self.fdc.motor_on = motor_state;
             // println!(
-            //     "[FDC OUT] Moteur -> {}",
-            //     if motor_state { "ALLUMÉ" } else { "ÉTEINT" }
+            //     "[FDC OUT] Motor -> {}",
+            //     if motor_state { "ON" } else { "OFF" }
             // );
             return;
         }
 
-        // Décodage FDC (A10 = 0, A8 = 1) -> typiquement 0xFBxx
+        // FDC decoding (A10 = 0, A8 = 1) -> typically 0xFBxx
         if (port & 0x0500) == 0x0100 {
-            // Le MSR est en lecture seule, on ne traite donc que le registre de Data (A0 = 1)
+            // MSR is read only, we just manage the Data Register (A0 = 1)
             if (port & 0x0001) != 0 {
-                //println!("[FDC OUT] Écriture DATA = 0x{:02X}", data);
+                //println!("[FDC OUT] Write DATA = 0x{:02X}", data);
                 self.fdc.write_data(data);
             }
             return;

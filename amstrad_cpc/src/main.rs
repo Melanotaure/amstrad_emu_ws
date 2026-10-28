@@ -56,22 +56,19 @@ impl EmulatorApp {
     }
 
     fn run_one_frame(&mut self) {
-        // On démarre avec les éventuels cycles de débordement de la trame précédente
         let mut cycles_this_frame = self.cycle_remainder;
 
         while cycles_this_frame < CYCLES_PER_FRAME {
             self.cpu.n_int = !self.amstrad.gate_array.interrupt_pending;
 
-            // 1. Exécution d'une instruction Z80
             let raw_cycles = self.cpu.execute(&mut self.amstrad);
 
-            // Acquittement matériel si le Z80 vient de prendre l'interruption
             if !self.cpu.n_int && !self.cpu.iff1 {
                 self.amstrad.gate_array.acknowledge_interrupt();
                 self.cpu.n_int = true;
             }
 
-            // Alignement sur 4 T-states (1 µs = 1 cycle Gate Array / CRTC)
+            // Alignment over 4 T-states (1 µs = 1 cycle Gate Array / CRTC)
             let aligned_cycles = ((raw_cycles + 3) & !3) as u32;
             cycles_this_frame += aligned_cycles;
             self.audio_cycle_accumulator += aligned_cycles as f32;
@@ -87,16 +84,14 @@ impl EmulatorApp {
                 }
             }
 
-            // 2. Avancement de la vidéo d'autant de microsecondes
             let video_steps = aligned_cycles / 4;
             for _ in 0..video_steps {
                 self.amstrad.step_video();
             }
         }
 
-        // Sauvegarde du surplus (0, 4, 8... T-states) pour garder un timing parfait
+        // Save the overflow (0, 4, 8... T-states) to keep a perfect timing
         self.cycle_remainder = cycles_this_frame - CYCLES_PER_FRAME;
-        // self.audio_cycle_accumulator = cycles_since_last_sample;
     }
 }
 
@@ -170,15 +165,11 @@ impl ApplicationHandler for EmulatorApp {
                         let (dst_even, dst_odd) = dst_pair.split_at_mut(SCREEN_WIDTH);
 
                         dst_even.copy_from_slice(src_line);
-                        //dst_odd.copy_from_slice(src_line);
-
+                        // To give a CRT monitor effect, the second line is dimmed (30% dimmer)
                         for (dst_pixel, &src_pixel) in dst_odd.iter_mut().zip(src_line.iter()) {
                             *dst_pixel = src_pixel - ((src_pixel >> 2) & 0x003F3F3F);
                         }
                     }
-
-                    // Ultra-fast direct copy of our Vec<u32> to the window
-                    // buffer.copy_from_slice(&self.amstrad.framebuffer.pixels);
 
                     buffer.present().unwrap();
                 }

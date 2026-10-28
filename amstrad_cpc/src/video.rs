@@ -70,11 +70,11 @@ impl Framebuffer {
             }
         }
 
-        // Le faisceau avance d'un cycle (16 micro-pixels)
+        // The beam moves by one cycle (16 micro-pixels)
         self.h_cycle += 1;
     }
 
-    /// Dessine 16 pixels de bordure (quand display_enable est faux)
+    /// Draw 16 border pixels (when display_enable is false)
     pub fn push_16_border_pixels(&mut self, border_rgb: u32) {
         if let Some(base_index) = self.current_buffer_index() {
             self.pixels[base_index..base_index + 16].fill(border_rgb);
@@ -83,7 +83,7 @@ impl Framebuffer {
         self.h_cycle += 1;
     }
 
-    /// Calcule l'index dans le tableau `pixels` si le faisceau est dans la zone visible
+    /// Compute the index in the table `pixels` if the beam is within the visible zone
     #[inline(always)]
     fn current_buffer_index(&self) -> Option<usize> {
         if self.h_cycle >= HBLANK_CYCLES

@@ -1,7 +1,7 @@
 pub struct Sector {
     pub cylinder: u8,
     pub head: u8,
-    pub sector_id: u8, // Sur CPC, généralement de 0xC1 à 0xC9
+    pub sector_id: u8, // On CPC, generally from 0xC1 to 0xC9
     pub size_code: u8, // N (2 = 512 octets)
     pub data: Vec<u8>,
 }
@@ -17,7 +17,7 @@ pub struct DiskImage {
 }
 
 impl DiskImage {
-    /// Charge un fichier .DSK standard en mémoire
+    /// Loads a standard file .DSK in memory
     pub fn load(path: &str) -> std::io::Result<Self> {
         let mut file = std::fs::File::open(path)?;
         let mut buffer = Vec::new();
@@ -30,7 +30,7 @@ impl DiskImage {
             ));
         }
 
-        // Détection du format étendu (Extended DSK)
+        // Detection of the extended format (Extended DSK)
         let signature = String::from_utf8_lossy(&buffer[0..16]);
         let is_extended = signature.contains("EXTENDED");
 
@@ -40,14 +40,14 @@ impl DiskImage {
         let global_track_size = u16::from_le_bytes([buffer[0x32], buffer[0x33]]) as usize;
 
         let mut tracks = Vec::new();
-        let mut offset = 0x100; // On saute l'en-tête global
+        let mut offset = 0x100; // Skip the global header
 
         for i in 0..(num_tracks * num_heads) {
             if offset + 0x100 > buffer.len() {
                 break;
             }
 
-            // En EDSK, le tableau des tailles des pistes commence à 0x34 (1 octet = 256 octets)
+            // In EDSK, the track size table starts at 0x34 (1 byte = 256 bytes)
             let current_track_size = if is_extended {
                 (buffer[0x34 + i] as usize) * 256
             } else {
@@ -55,7 +55,7 @@ impl DiskImage {
             };
 
             if current_track_size == 0 {
-                continue; // Piste non formatée ou vide
+                continue; // Non formatted track or empty
             }
 
             let track_cylinder = buffer[offset + 0x10];
@@ -63,7 +63,7 @@ impl DiskImage {
             let num_sectors = buffer[offset + 0x15] as usize;
 
             let mut sectors = Vec::new();
-            let mut sector_data_offset = offset + 0x100; // Les données suivent l'en-tête de piste
+            let mut sector_data_offset = offset + 0x100; // The data follow the track header
 
             for s in 0..num_sectors {
                 let info_offset = offset + 0x18 + (s * 8);
@@ -73,12 +73,12 @@ impl DiskImage {
                 let r = buffer[info_offset + 2];
                 let n = buffer[info_offset + 3];
 
-                // Sur les jeux protégés (EDSK), la vraie taille du secteur prime sur le code 'N'
-                // Elle est stockée dans les octets 6 et 7 du bloc d'information du secteur.
+                // For protected games (EDSK), the real sector size is more important than the code 'N'
+                // It is stored in the bytes 6 and 7 of the sector information block.
                 let actual_size = if is_extended {
                     u16::from_le_bytes([buffer[info_offset + 6], buffer[info_offset + 7]]) as usize
                 } else {
-                    128 << n // Formule matérielle par défaut (N=2 -> 512 octets)
+                    128 << n // Default hardware formula (N=2 -> 512 bytes)
                 };
 
                 let data_end = sector_data_offset + actual_size;
@@ -103,22 +103,22 @@ impl DiskImage {
                 head: track_head,
                 sectors,
             });
-            offset += current_track_size; // On passe à la piste suivante
+            offset += current_track_size; // Next track
         }
 
-        // println!(
-        //     "[DSK] Image chargée : '{}' ({} pistes, étendu={})",
-        //     path,
-        //     tracks.len(),
-        //     is_extended
-        // );
+        println!(
+            "[DSK] Image loaded : '{}' ({} tracks, extended={})",
+            path,
+            tracks.len(),
+            is_extended
+        );
         Ok(Self { tracks })
     }
 
-    /// Récupère les données d'un secteur spécifique (C, H, R)
+    /// Get one specific sector data (C, H, R)
     pub fn get_sector_data(&self, cylinder: u8, head: u8, sector_id: u8) -> Option<&[u8]> {
         for track in &self.tracks {
-            // Sur l'Amstrad, la tête est généralement 0
+            // On the Amstrad, the head is generally 0
             if track.cylinder == cylinder && track.head == head {
                 for sector in &track.sectors {
                     if sector.sector_id == sector_id {
@@ -127,6 +127,6 @@ impl DiskImage {
                 }
             }
         }
-        None // Secteur introuvable
+        None // Sector not found
     }
 }

@@ -1,6 +1,6 @@
-// Table de conversion logarithmique (-3 dB par palier) du AY-3-8912
+// AY-3-8912 Logarithmic conversion table (-3 dB per step)
 const AY_VOLUME_TABLE: [f32; 16] = [
-    0.000000, // 0 : Silence total
+    0.000000, // 0 : Silence
     0.007812, // 1
     0.011048, // 2
     0.015625, // 3
@@ -13,9 +13,9 @@ const AY_VOLUME_TABLE: [f32; 16] = [
     0.176776, // 10
     0.250000, // 11
     0.353553, // 12
-    0.500000, // 13 : Moitié de l'amplitude max (-6 dB)
+    0.500000, // 13 : Half of the max amplitude (-6 dB)
     0.707106, // 14 : 1 / sqrt(2) (-3 dB)
-    1.000000, // 15 : Amplitude maximale (0 dB)
+    1.000000, // 15 : Max Amplitude (0 dB)
 ];
 
 pub struct PsgAy {
@@ -251,27 +251,27 @@ impl PsgAy {
 
     fn step_envelope(&mut self) {
         if self.env_holding {
-            return; // L'enveloppe est figée jusqu'à la prochaine écriture dans R13
+            return; // The envelop is held until the next writing in R13
         }
 
         self.env_step += self.env_direction;
 
-        // Débordement : fin d'un cycle (montée au-delà de 15, ou descente sous 0)
+        // Overflow: end of one cycle (over 15, or under 0)
         if self.env_step < 0 || self.env_step > 15 {
             let shape = self.registers[13] & 0x0F;
-            let cont = (shape & 0x08) != 0; // Bit 3 : Continuer
-            let attack = (shape & 0x04) != 0; // Bit 2 : Attaque (Montée)
-            let alt = (shape & 0x02) != 0; // Bit 1 : Alterner
-            let hold = (shape & 0x01) != 0; // Bit 0 : Figer
+            let cont = (shape & 0x08) != 0; // Bit 3 : Continue
+            let attack = (shape & 0x04) != 0; // Bit 2 : Attack
+            let alt = (shape & 0x02) != 0; // Bit 1 : Alternate
+            let hold = (shape & 0x01) != 0; // Bit 0 : Hold
 
             if !cont {
-                // Formes 0 à 7 : Un seul cycle, puis figé à 0 (\___)
+                // Forms 0 to 7 : One cycle, then held to 0 (\___)
                 self.env_holding = true;
                 self.env_volume = 0;
             } else {
-                // Formes 8 à 15 (Continue)
+                // Forms 8 to 15 (Continue)
                 if alt {
-                    self.env_direction = -self.env_direction; // Rebondit
+                    self.env_direction = -self.env_direction; // Bounce
                 }
                 if hold {
                     self.env_holding = true;
@@ -281,8 +281,7 @@ impl PsgAy {
                 self.env_volume = self.env_step as usize;
 
                 if self.env_holding {
-                    // Magie matérielle du AY-3-8912 :
-                    // Le volume figé est déterminé par un OU exclusif entre Attack et Alternate
+                    // Held volume is determined by an exclusive OR between Attack and Alternate
                     self.env_volume = if attack ^ alt { 15 } else { 0 };
                 }
             }

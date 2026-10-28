@@ -17,7 +17,7 @@ impl AudioSystem {
         let sample_rate = config.sample_rate().0 as f32;
         let channels = config.channels() as usize;
 
-        // Buffer d'environ 50 ms pour absorber la gigue (jitter) de winit
+        // Buffer of about 50 ms to absorb the jitter of winit
         let latency_frames = (sample_rate as f32 * 0.05) as usize;
         let ring_buffer = HeapRb::<f32>::new(latency_frames * channels);
         let (producer, mut consumer) = ring_buffer.split();
@@ -26,7 +26,7 @@ impl AudioSystem {
             .build_output_stream(
                 &config.into(),
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    // Le thread audio consomme le Ring Buffer
+                    // The audio thread consumes the Ring Buffer
                     for sample in data.iter_mut() {
                         *sample = consumer.pop().unwrap_or(0.0);
                     }
