@@ -441,35 +441,47 @@ impl Z80 {
     // Main function to run the CPU's instructions
     pub fn execute<B: SystemBus>(&mut self, bus: &mut B) -> u8 {
         // Interrupt management befor instruction
-        if !self.n_int && self.iff1 && !self.ei_delay_flag {
-            return self.handle_interrupt(bus, 0xFF);
+        self.int_acknowledged = false;
+        if !self.n_int && self.iff1 {
+            let cycles = self.handle_interrupt(bus, 0xFF);
+            if cycles != 0 {
+                return cycles;
+            }
         }
 
-        let instr = bus.read_memory(self.reg.pc);
+        let instr = if self.n_halt {
+            bus.read_memory(self.reg.pc)
+        } else {
+            0x76
+        };
         let mut cycles = CYCLES[instr as usize];
 
         // Increment R register at each instruction
         self.reg.inc_r();
 
-        let af = self.reg.get_af();
-        self.trace.push_back(TraceEntry {
-            pc: self.reg.pc,
-            opcode: instr,
-            sp: self.reg.sp,
-            a: (af >> 8) as u8,
-            f: (af & 0xFF) as u8,
-        });
-        if self.trace.len() > 100 {
-            self.trace.pop_front();
+        if self.trace_enabled {
+            let af = self.reg.get_af();
+            self.trace.push_back(TraceEntry {
+                pc: self.reg.pc,
+                opcode: instr,
+                sp: self.reg.sp,
+                a: (af >> 8) as u8,
+                f: (af & 0xFF) as u8,
+            });
+            if self.trace.len() > 100 {
+                self.trace.pop_front();
+            }
         }
 
-        // Crash detection
-        if self.reg.pc > 0x0100 {
-            self.boot_finished = true;
-        }
-        if self.boot_finished && self.reg.pc == 0x0000 {
-            self.dump_trace(bus);
-            panic!("CRASH DETECTED: Z80 brutal reboot!");
+        // Optional crash detection (debug aid)
+        if self.crash_detection {
+            if self.reg.pc > 0x0100 {
+                self.boot_finished = true;
+            }
+            if self.boot_finished && self.reg.pc == 0x0000 {
+                self.dump_trace(bus);
+                panic!("CRASH DETECTED: Z80 brutal reboot!");
+            }
         }
 
         match instr {
@@ -1514,7 +1526,11 @@ impl Z80 {
             0x37 => self.scf(),
             // HALT
             0x76 => {
-                self.n_halt = false;
+                if !self.n_halt {
+                    self.reg.dec_pc();
+                } else {
+                    self.n_halt = false;
+                }
                 self.reg.flags.alu = false;
             }
             // DI
@@ -1542,26 +1558,22 @@ impl Z80 {
             cycles += CYCLES_DD_FD[instr as usize];
         }
 
-        if self.p_inst != 0xFB && self.ei_delay_flag {
+        if instr != 0xFB && self.ei_delay_flag {
             self.ei_delay_flag = false;
         }
 
         // A non maskable interrupt is pending
-        let nmi = !self.n_nmi;
         if !self.n_nmi {
             self.iff2 = self.iff1;
             self.iff1 = false;
 
             self.rst(0x0066, bus);
             self.n_nmi = true;
+            self.n_halt = true;
         }
 
         self.p_inst = instr;
-        // If current instruction is HALT, stay on HALT instruction
-        // Except if an NMI occured.
-        if instr != 0x76 || nmi {
-            self.reg.inc_pc();
-        }
+        self.reg.inc_pc();
         cycles
     }
 }

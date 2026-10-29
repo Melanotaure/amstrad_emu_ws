@@ -14,7 +14,7 @@ const AY_VOLUME_TABLE: [f32; 16] = [
     0.250000, // 11
     0.353553, // 12
     0.500000, // 13 : Half of the max amplitude (-6 dB)
-    0.707106, // 14 : 1 / sqrt(2) (-3 dB)
+    std::f32::consts::FRAC_1_SQRT_2, // 14 : 1 / sqrt(2) (-3 dB)
     1.000000, // 15 : Max Amplitude (0 dB)
 ];
 
@@ -81,9 +81,7 @@ impl PsgAy {
             }
             // Data write (%10): writes into the selected register
             (true, false) => {
-                if self.selected_register < 16 {
-                    self.registers[self.selected_register] = ppi_port_a_out;
-                }
+                self.write_data(ppi_port_a_out);
                 None
             }
             // Data read (%01): reads the selected register
@@ -147,7 +145,7 @@ impl PsgAy {
         let ep = ((self.registers[12] as u16) << 8) | (self.registers[11] as u16);
         let ep = if ep == 0 { 1 } else { ep };
 
-        let env_freq = 1_000_000.0 / (256.0 * ep as f32);
+        let env_freq = 1_000_000.0 / (16.0 * ep as f32);
         self.env_phase += env_freq / self.sample_rate;
 
         while self.env_phase >= 1.0 {
@@ -210,19 +208,19 @@ impl PsgAy {
 
             if phase_nb == 0 {
                 self.phase_a += freq / self.sample_rate;
-                if self.phase_a > 1.0 {
+                if self.phase_a >= 1.0 {
                     self.phase_a -= 1.0;
                 }
                 self.phase_a < 0.5
             } else if phase_nb == 1 {
                 self.phase_b += freq / self.sample_rate;
-                if self.phase_b > 1.0 {
+                if self.phase_b >= 1.0 {
                     self.phase_b -= 1.0;
                 }
                 self.phase_b < 0.5
             } else {
                 self.phase_c += freq / self.sample_rate;
-                if self.phase_c > 1.0 {
+                if self.phase_c >= 1.0 {
                     self.phase_c -= 1.0;
                 }
                 self.phase_c < 0.5

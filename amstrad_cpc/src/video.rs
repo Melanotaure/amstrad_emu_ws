@@ -15,6 +15,12 @@ pub struct Framebuffer {
     prev_vsync: bool,
 }
 
+impl Default for Framebuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Framebuffer {
     pub fn new() -> Self {
         Self {
@@ -46,7 +52,7 @@ impl Framebuffer {
     pub fn push_16_pixels(&mut self, mode: u8, pens: &[u8], palette: &[u32]) {
         if let Some(base_index) = self.current_buffer_index() {
             match mode {
-                0 => {
+                0 | 3 => {
                     for (i, &pen) in pens[0..4].iter().enumerate() {
                         let rgb = palette[pen as usize];
                         for j in 0..4 {

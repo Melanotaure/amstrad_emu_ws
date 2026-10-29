@@ -17,6 +17,13 @@ pub struct GateArray {
     lut_mode0: [[u8; 2]; 256],
     lut_mode1: [[u8; 4]; 256],
     lut_mode2: [[u8; 8]; 256],
+    lut_mode3: [[u8; 2]; 256],
+}
+
+impl Default for GateArray {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GateArray {
@@ -34,23 +41,34 @@ impl GateArray {
             lut_mode0: Self::build_lut_mode0(),
             lut_mode1: Self::build_lut_mode1(),
             lut_mode2: Self::build_lut_mode2(),
+            lut_mode3: Self::build_lut_mode3(),
         }
     }
 
     /// Called at each CRTC cycle (1 µs) with the current sync signals
     pub fn update_sync(&mut self, hsync: bool, vsync: bool) {
-        // VSYNC RISING EDGE: Absolute Sync
+        // VSYNC RISING EDGE: the synchronisation starts 2 HSYNCs later
         if vsync && !self.prev_vsync {
-            self.line_counter = 0;
-            self.interrupt_pending = true; // Force the interrupt for the OS!
+            self.vsync_delay = 2;
         }
 
         // HSYNC FALLING EDGE: Normal line count
         if !hsync && self.prev_hsync {
             self.line_counter += 1;
-            if self.line_counter == 52 {
+            if self.line_counter >= 52 {
                 self.line_counter = 0;
                 self.interrupt_pending = true;
+            }
+
+            if self.vsync_delay > 0 {
+                self.vsync_delay -= 1;
+                if self.vsync_delay == 0 {
+                    // If the counter is >= 32, the interrupt is raised; in any case it restarts from 0
+                    if self.line_counter >= 32 {
+                        self.interrupt_pending = true;
+                    }
+                    self.line_counter = 0;
+                }
             }
         }
 
@@ -77,8 +95,8 @@ impl GateArray {
 
     /// Called when the Z80 sends %000xxxxx
     pub fn select_pen(&mut self, data: u8) {
-        // On isole les 5 bits (0x1F = 31)
-        self.selected_pen = data & 0x1F;
+        // Bit 4 selects the border (whatever the lower bits), otherwise the pen number is 0..15
+        self.selected_pen = if (data & 0x10) != 0 { 16 } else { data & 0x0F };
     }
 
     /// Called when the Z80 sends %010xxxxx
@@ -88,10 +106,9 @@ impl GateArray {
 
         if self.selected_pen < 16 {
             self.pens_rgb[self.selected_pen as usize] = rgb_value;
-        } else if self.selected_pen == 16 {
+        } else {
             self.border_rgb = rgb_value;
         }
-        // If select_pen > 16, ignore on a true CPC
     }
 
     fn build_lut_mode0() -> [[u8; 2]; 256] {
@@ -105,6 +122,17 @@ impl GateArray {
             let p1 =
                 ((b >> 6) & 1) | (((b >> 2) & 1) << 1) | (((b >> 4) & 1) << 2) | ((b & 1) << 3);
 
+            lut[b as usize] = [p0, p1];
+        }
+        lut
+    }
+
+    /// Mode 3 (undocumented): 2 pixels per byte, 2 bits per pixel (bits 5, 4, 1 and 0 are unused)
+    fn build_lut_mode3() -> [[u8; 2]; 256] {
+        let mut lut = [[0; 2]; 256];
+        for b in 0..=255u8 {
+            let p0 = ((b >> 7) & 1) | (((b >> 3) & 1) << 1);
+            let p1 = ((b >> 6) & 1) | (((b >> 2) & 1) << 1);
             lut[b as usize] = [p0, p1];
         }
         lut
@@ -140,7 +168,7 @@ impl GateArray {
             0 => &self.lut_mode0[byte as usize],
             1 => &self.lut_mode1[byte as usize],
             2 => &self.lut_mode2[byte as usize],
-            _ => &self.lut_mode1[byte as usize], // safe fallback
+            _ => &self.lut_mode3[byte as usize],
         }
     }
 }
@@ -173,10 +201,10 @@ const HARDWARE_COLORS_RGB: [u32; 32] = [
     0x00007FFF, // 23 : Sky Blue
     0x007F007F, // 24 : Magenta
     0x007FFF7F, // 25 : Pastel Green
-    0x007F0000, // 26 : Red
-    0x007F00FF, // 27 : Mauve
-    0x007F7F00, // 28 : Yellow
-    0x007F7FFF, // 29 : Pastel Blue
-    0x00000000, // 30 : Black - Doublon
-    0x00000000, // 31 : Black - Doublon
+    0x007FFF00, // 26 : Lime
+    0x007FFFFF, // 27 : Pastel Cyan
+    0x007F0000, // 28 : Red
+    0x007F00FF, // 29 : Mauve
+    0x007F7F00, // 30 : Yellow
+    0x007F7FFF, // 31 : Pastel Blue
 ];

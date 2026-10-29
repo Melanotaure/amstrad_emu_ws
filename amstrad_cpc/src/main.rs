@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use amstrad_cpc::dsk::DiskImage;
 use softbuffer::{Context, Surface};
 use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
+use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
@@ -36,6 +36,9 @@ struct EmulatorApp {
     audio: AudioSystem,
     audio_cycle_accumulator: f32,
     cycles_per_sample: f32,
+
+    shift_held: [bool; 2],
+    ctrl_held: [bool; 2],
 }
 
 impl EmulatorApp {
@@ -52,6 +55,8 @@ impl EmulatorApp {
             audio,
             audio_cycle_accumulator: 0.0,
             cycles_per_sample,
+            shift_held: [false; 2],
+            ctrl_held: [false; 2],
         }
     }
 
@@ -63,7 +68,8 @@ impl EmulatorApp {
 
             let raw_cycles = self.cpu.execute(&mut self.amstrad);
 
-            if !self.cpu.n_int && !self.cpu.iff1 {
+            // The request stays asserted until the CPU really takes the interrupt (INTA)
+            if self.cpu.int_acknowledged {
                 self.amstrad.gate_array.acknowledge_interrupt();
                 self.cpu.n_int = true;
             }
@@ -78,9 +84,10 @@ impl EmulatorApp {
 
                 let sample = self.amstrad.psg.generate_sample();
 
-                if self.audio.producer.free_len() >= 2 {
-                    let _ = self.audio.producer.push(sample);
-                    let _ = self.audio.producer.push(sample);
+                if self.audio.producer.free_len() >= self.audio.channels {
+                    for _ in 0..self.audio.channels {
+                        let _ = self.audio.producer.push(sample);
+                    }
                 }
             }
 
@@ -100,7 +107,7 @@ impl ApplicationHandler for EmulatorApp {
         if self.window.is_none() {
             let win_attrs = Window::default_attributes()
                 .with_title("Amstrad CPC 6128 Emulator")
-                .with_inner_size(LogicalSize::new(DISPLAY_WIDTH, DISPLAY_HEIGHT))
+                .with_inner_size(PhysicalSize::new(DISPLAY_WIDTH, DISPLAY_HEIGHT))
                 .with_resizable(false);
 
             let window = Rc::new(
@@ -137,19 +144,49 @@ impl ApplicationHandler for EmulatorApp {
                     KeyEvent {
                         physical_key: PhysicalKey::Code(keycode),
                         state,
+                        repeat,
                         ..
                     },
                 ..
             } => {
+                // The CPC keyboard is scanned by the firmware: OS auto-repeat must be ignored
+                if repeat {
+                    return;
+                }
+
                 if keycode == KeyCode::F12 && state == ElementState::Pressed {
                     println!("--- MANUAL TRACE DUMP TRIGGERED ---");
                     self.cpu.dump_trace(&mut self.amstrad);
                 }
 
-                if let Some((line, bit)) = map_key_to_matrix(keycode) {
-                    let is_pressed = state == ElementState::Pressed;
-                    self.amstrad.psg.set_key_state(line, bit, is_pressed);
+                let is_pressed = state == ElementState::Pressed;
+                match keycode {
+                    KeyCode::ShiftLeft | KeyCode::ShiftRight => self.shift_held[
+                        (keycode == KeyCode::ShiftRight) as usize
+                    ] = is_pressed,
+                    KeyCode::ControlLeft | KeyCode::ControlRight => self.ctrl_held[
+                        (keycode == KeyCode::ControlRight) as usize
+                    ] = is_pressed,
+                    _ => {}
                 }
+
+                if let Some((line, bit)) = map_key_to_matrix(keycode) {
+                    // Shift and Ctrl share one CPC key: stay down while either physical key is held
+                    let down = match keycode {
+                        KeyCode::ShiftLeft | KeyCode::ShiftRight => self.shift_held.contains(&true),
+                        KeyCode::ControlLeft | KeyCode::ControlRight => {
+                            self.ctrl_held.contains(&true)
+                        }
+                        _ => is_pressed,
+                    };
+                    self.amstrad.psg.set_key_state(line, bit, down);
+                }
+            }
+            WindowEvent::Focused(false) => {
+                // Key release events are lost when the focus is gone
+                self.shift_held = [false; 2];
+                self.ctrl_held = [false; 2];
+                self.amstrad.psg.keyboard_matrix = [0xFF; 10];
             }
             WindowEvent::RedrawRequested => {
                 if let Some(surface) = &mut self.surface {
@@ -216,9 +253,16 @@ fn main() {
         .load_upper_rom(7, "amstrad_cpc/roms/amsdos.rom")
         .expect("AMSDOS ROM not found");
 
-    amstrad.fdc.disk = DiskImage::load("amstrad_cpc/roms/FruityFrank.dsk").ok();
+    amstrad.fdc.disk = match DiskImage::load("amstrad_cpc/roms/FruityFrank.dsk") {
+        Ok(disk) => Some(disk),
+        Err(e) => {
+            eprintln!("Unable to load the disk image: {e}");
+            None
+        }
+    };
 
-    let cpu = Z80::new();
+    let mut cpu = Z80::new();
+    cpu.trace_enabled = true; // Needed by the F12 trace dump
 
     let event_loop = EventLoop::new().expect("Can't init EventLoop");
     let mut app = EmulatorApp::new(cpu, amstrad, audio);

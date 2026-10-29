@@ -15,8 +15,15 @@ pub struct Memory {
     pub lower_rom_enabled: bool,
     pub upper_rom_enabled: bool,
     pub active_upper_rom: usize,
+    upper_rom_loaded: [bool; NB_UPPER_ROMS],
 
     ram_offsets: [usize; NB_RAM_OFFSETS],
+}
+
+impl Default for Memory {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Memory {
@@ -30,28 +37,41 @@ impl Memory {
             upper_rom_enabled: true,
             active_upper_rom: 0,
 
-            ram_offsets: [
-                0 * RAM_BLOCK_SIZE,
-                1 * RAM_BLOCK_SIZE,
-                2 * RAM_BLOCK_SIZE,
-                3 * RAM_BLOCK_SIZE,
-            ],
+            upper_rom_loaded: [false; NB_UPPER_ROMS],
+
+            ram_offsets: [0, RAM_BLOCK_SIZE, 2 * RAM_BLOCK_SIZE, 3 * RAM_BLOCK_SIZE],
         }
+    }
+
+    fn invalid_rom_size(len: usize) -> std::io::Error {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("invalid ROM size: {len} bytes (expected {ROM_SIZE})"),
+        )
     }
 
     pub fn load_lower_rom<P: AsRef<Path>>(&mut self, path: P) -> std::io::Result<()> {
         let data = fs::read(path)?;
-        if data.len() == ROM_SIZE {
-            self.lower_rom.copy_from_slice(&data);
+        if data.len() != ROM_SIZE {
+            return Err(Self::invalid_rom_size(data.len()));
         }
+        self.lower_rom.copy_from_slice(&data);
         Ok(())
     }
 
     pub fn load_upper_rom<P: AsRef<Path>>(&mut self, slot: usize, path: P) -> std::io::Result<()> {
         let data = fs::read(path)?;
-        if data.len() == ROM_SIZE && slot < NB_UPPER_ROMS {
-            self.upper_roms[slot].copy_from_slice(&data);
+        if slot >= NB_UPPER_ROMS {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("invalid upper ROM slot: {slot}"),
+            ));
         }
+        if data.len() != ROM_SIZE {
+            return Err(Self::invalid_rom_size(data.len()));
+        }
+        self.upper_roms[slot].copy_from_slice(&data);
+        self.upper_rom_loaded[slot] = true;
         Ok(())
     }
 
@@ -65,19 +85,22 @@ impl Memory {
         }
 
         if window == 3 && self.upper_rom_enabled {
-            return self.upper_roms[self.active_upper_rom][offset];
+            // An empty slot is read as the BASIC ROM (slot 0)
+            let slot = if self.upper_rom_loaded[self.active_upper_rom] {
+                self.active_upper_rom
+            } else {
+                0
+            };
+            return self.upper_roms[slot][offset];
         }
 
         let ram_base_index = self.ram_offsets[window];
         self.ram[ram_base_index + offset]
     }
 
+    /// Reads the main 64K RAM bank, ignoring ROMs and CPU paging (used by the video hardware)
     pub fn read_byte_direct(&self, addr: u16) -> u8 {
-        let window = (addr >> 14) as usize;
-        let offset = (addr & 0x3FFF) as usize;
-
-        let ram_base_index = self.ram_offsets[window];
-        self.ram[ram_base_index + offset]
+        self.ram[addr as usize]
     }
 
     pub fn write_byte(&mut self, addr: u16, val: u8) {
@@ -96,8 +119,8 @@ impl Memory {
 
         // Precalculated RAM banks' blocks base adresses in Ko to ease understanding
         // RAM BANK 1: 4 x blocks (b0 -> b3)
-        let b0 = 0 * RAM_BLOCK_SIZE;
-        let b1 = 1 * RAM_BLOCK_SIZE;
+        let b0 = 0;
+        let b1 = RAM_BLOCK_SIZE;
         let b2 = 2 * RAM_BLOCK_SIZE;
         let b3 = 3 * RAM_BLOCK_SIZE;
         // RAM BANK 2: 4 x blocks (b4 -> b7)
@@ -110,7 +133,7 @@ impl Memory {
             0 => [b0, b1, b2, b3], // 0xC0 : Default config
             1 => [b0, b1, b2, b7], // 0xC1
             2 => [b4, b5, b6, b7], // 0xC2
-            3 => [b0, b3, b2, b3], // 0xC3
+            3 => [b0, b3, b2, b7], // 0xC3
             4 => [b0, b4, b2, b3], // 0xC4 : Most used config (AMSDOS/Games)
             5 => [b0, b5, b2, b3], // 0xC5
             6 => [b0, b6, b2, b3], // 0xC6

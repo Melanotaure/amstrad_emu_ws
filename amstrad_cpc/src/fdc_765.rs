@@ -34,6 +34,15 @@ pub struct Fdc765 {
     interrupt_pending: bool,
 
     pub current_cylinder: u8,
+
+    // Result of the last Seek/Recalibrate, reported by Sense Interrupt Status
+    seek_drive: u8,
+}
+
+impl Default for Fdc765 {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Fdc765 {
@@ -50,6 +59,7 @@ impl Fdc765 {
             disk: None,
             interrupt_pending: false,
             current_cylinder: 0,
+            seek_drive: 0,
         }
     }
 
@@ -80,7 +90,9 @@ impl Fdc765 {
     }
 
     pub fn read_data(&mut self) -> u8 {
-        if self.state == FdcState::ExecutionRead || self.state == FdcState::Result {
+        if (self.state == FdcState::ExecutionRead || self.state == FdcState::Result)
+            && self.data_index < self.data_buffer.len()
+        {
             let val = self.data_buffer[self.data_index];
             self.data_index += 1;
 
@@ -123,6 +135,13 @@ impl Fdc765 {
             }
             0x07 | 0x0F => {
                 // Recalibrate (0x07) or Seek (0x0F) -> Triggers a software "interrupt"
+                self.seek_drive = self.command_buffer[1] & 0x03;
+                if cmd == 0x07 {
+                    self.current_cylinder = 0;
+                } else {
+                    // Seek: the new cylinder number is the 2nd parameter
+                    self.current_cylinder = self.command_buffer[2];
+                }
                 self.interrupt_pending = true;
                 self.state = FdcState::Idle;
                 self.update_msr();
@@ -131,8 +150,8 @@ impl Fdc765 {
                 // Sense Interrupt Status (Check if a Seek/Recalibrate is over)
                 if self.interrupt_pending {
                     self.interrupt_pending = false;
-                    // ST0 = 0x20 (Seek End), PCN = 0x00 (Track 0, simulated for now)
-                    self.data_buffer = vec![0x20, 0x00];
+                    // ST0 = Seek End + drive number, PCN = present cylinder
+                    self.data_buffer = vec![0x20 | self.seek_drive, self.current_cylinder];
                 } else {
                     // Warning : if no pending interrupt, returns an error
                     self.data_buffer = vec![0x80]; // ST0 = Invalid Command
@@ -143,7 +162,7 @@ impl Fdc765 {
                 // Sense Drive Status (L'AMSDOS checks if the disk is ready)
                 let drive = self.command_buffer[1] & 0x03;
                 let ready_bit = 0x20; // 1 = Disque inserted and ready
-                let track0_bit = 0x10; // 1 = The head is on the track 0
+                let track0_bit = if self.current_cylinder == 0 { 0x10 } else { 0 }; // 1 = The head is on the track 0
                 self.data_buffer = vec![ready_bit | track0_bit | drive]; // Returns ST3
                 self.transition_to_result();
             }

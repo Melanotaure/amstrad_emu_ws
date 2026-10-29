@@ -43,13 +43,14 @@ impl DiskImage {
         let mut offset = 0x100; // Skip the global header
 
         for i in 0..(num_tracks * num_heads) {
-            if offset + 0x100 > buffer.len() {
+            // Track information block (0x18 bytes before the sector table)
+            if offset + 0x18 > buffer.len() {
                 break;
             }
 
             // In EDSK, the track size table starts at 0x34 (1 byte = 256 bytes)
             let current_track_size = if is_extended {
-                (buffer[0x34 + i] as usize) * 256
+                buffer.get(0x34 + i).copied().unwrap_or(0) as usize * 256
             } else {
                 global_track_size
             };
@@ -67,8 +68,11 @@ impl DiskImage {
 
             for s in 0..num_sectors {
                 let info_offset = offset + 0x18 + (s * 8);
+                if info_offset + 8 > buffer.len() {
+                    break;
+                }
 
-                let c = buffer[info_offset + 0];
+                let c = buffer[info_offset];
                 let h = buffer[info_offset + 1];
                 let r = buffer[info_offset + 2];
                 let n = buffer[info_offset + 3];
@@ -78,7 +82,7 @@ impl DiskImage {
                 let actual_size = if is_extended {
                     u16::from_le_bytes([buffer[info_offset + 6], buffer[info_offset + 7]]) as usize
                 } else {
-                    128 << n // Default hardware formula (N=2 -> 512 bytes)
+                    128usize << n.min(8) // Default hardware formula (N=2 -> 512 bytes)
                 };
 
                 let data_end = sector_data_offset + actual_size;

@@ -10,6 +10,12 @@ pub struct Ppi8255 {
     pub port_c_upper_input: bool,
 }
 
+impl Default for Ppi8255 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Ppi8255 {
     pub fn new() -> Self {
         Self {

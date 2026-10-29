@@ -48,7 +48,15 @@ pub struct Z80 {
     // Added the clock pin but might not be used
     pub _clock: u64,
 
+    /// Set by `execute` when a maskable interrupt was accepted (INTA cycle).
+    /// The host must clear its interrupt request when it sees this flag.
+    pub int_acknowledged: bool,
+
+    // Debug facilities (disabled by default)
+    pub trace_enabled: bool,
     pub trace: VecDeque<TraceEntry>,
+    /// When true, jumping back to 0x0000 after the boot has started panics with a trace dump
+    pub crash_detection: bool,
     pub boot_finished: bool,
 }
 
@@ -75,7 +83,10 @@ impl Z80 {
             n_busack: true,
             p_inst: 0,
             _clock: 0_u64,
+            int_acknowledged: false,
+            trace_enabled: false,
             trace: VecDeque::with_capacity(100),
+            crash_detection: false,
             boot_finished: false,
         }
     }
@@ -98,12 +109,16 @@ impl Z80 {
         self.n_rfsh = true;
         self.n_wait = true;
         self.n_wr = true;
-        self.p_inst;
+        self.ei_delay_flag = false;
+        self.int_acknowledged = false;
+        self.p_inst = 0;
+        self.trace.clear();
+        self.boot_finished = false;
         self._clock = 0;
     }
 
     pub fn handle_interrupt(&mut self, bus: &mut impl SystemBus, data_bus: u8) -> u8 {
-        if !self.iff1 || self.ei_delay_flag {
+        if !self.iff1 || self.ei_delay_flag || self.p_inst == 0xDD || self.p_inst == 0xFD {
             return 0;
         }
 
@@ -114,10 +129,14 @@ impl Z80 {
 
         self.iff1 = false;
         self.iff2 = false;
+        self.int_acknowledged = true;
+        // The interrupt breaks any instruction prefix sequence
+        self.p_inst = 0;
 
         match self.im {
-            InterruptMode::IM_0 => 13,
-            InterruptMode::IM_1 => {
+            // IM 0 executes the instruction placed on the data bus: on a CPC
+            // the bus floats to 0xFF (RST 38h), which behaves like IM 1.
+            InterruptMode::IM_0 | InterruptMode::IM_1 => {
                 let [pcl, pch] = self.reg.pc.to_le_bytes();
                 self.reg.dec_sp();
                 bus.write_memory(self.reg.sp, pch);
