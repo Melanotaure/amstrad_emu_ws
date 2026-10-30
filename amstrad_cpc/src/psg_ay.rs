@@ -1,21 +1,21 @@
 // AY-3-8912 Logarithmic conversion table (-3 dB per step)
 const AY_VOLUME_TABLE: [f32; 16] = [
-    0.000000, // 0 : Silence
-    0.007812, // 1
-    0.011048, // 2
-    0.015625, // 3
-    0.022097, // 4
-    0.031250, // 5
-    0.044194, // 6
-    0.062500, // 7
-    0.088388, // 8
-    0.125000, // 9
-    0.176776, // 10
-    0.250000, // 11
-    0.353553, // 12
-    0.500000, // 13 : Half of the max amplitude (-6 dB)
+    0.000000,                        // 0 : Silence
+    0.007812,                        // 1
+    0.011048,                        // 2
+    0.015625,                        // 3
+    0.022097,                        // 4
+    0.031250,                        // 5
+    0.044194,                        // 6
+    0.062500,                        // 7
+    0.088388,                        // 8
+    0.125000,                        // 9
+    0.176776,                        // 10
+    0.250000,                        // 11
+    0.353553,                        // 12
+    0.500000,                        // 13 : Half of the max amplitude (-6 dB)
     std::f32::consts::FRAC_1_SQRT_2, // 14 : 1 / sqrt(2) (-3 dB)
-    1.000000, // 15 : Max Amplitude (0 dB)
+    1.000000,                        // 15 : Max Amplitude (0 dB)
 ];
 
 pub struct PsgAy {
@@ -40,6 +40,13 @@ pub struct PsgAy {
     env_volume: usize,
 
     sample_rate: f32,
+
+    // Last (BDIR, BC1) state: latch and write commands act on a bus transition only
+    last_bus: (bool, bool),
+
+    // DC blocker state (channels are unipolar: 0..volume)
+    dc_prev_in: f32,
+    dc_prev_out: f32,
 }
 
 impl PsgAy {
@@ -60,6 +67,9 @@ impl PsgAy {
             env_holding: false,
             env_volume: 0,
             sample_rate,
+            last_bus: (false, false),
+            dc_prev_in: 0.0,
+            dc_prev_out: 0.0,
         }
     }
 
@@ -71,16 +81,25 @@ impl PsgAy {
         ppi_port_a_out: u8,
         selected_line: usize,
     ) -> Option<u8> {
+        let changed = self.last_bus != (bdir, bc1);
+        self.last_bus = (bdir, bc1);
+
         match (bdir, bc1) {
             // Inactive
             (false, false) => None,
             // Address Latch (%11): active register selection
             (true, true) => {
+                if !changed {
+                    return None;
+                }
                 self.selected_register = (ppi_port_a_out & 0x0F) as usize;
                 None
             }
             // Data write (%10): writes into the selected register
             (true, false) => {
+                if !changed {
+                    return None;
+                }
                 self.write_data(ppi_port_a_out);
                 None
             }
@@ -186,7 +205,13 @@ impl PsgAy {
         let sample_b = self.mix_channel(2, 3, 9, 1, tone_b_enabled, noise_b_enabled);
         let sample_c = self.mix_channel(4, 5, 10, 2, tone_c_enabled, noise_c_enabled);
 
-        (sample_a + sample_b + sample_c) / 3.0
+        let mixed = (sample_a + sample_b + sample_c) / 3.0;
+
+        // High-pass (DC blocker): removes the offset of the unipolar channels
+        let out = mixed - self.dc_prev_in + 0.995 * self.dc_prev_out;
+        self.dc_prev_in = mixed;
+        self.dc_prev_out = out;
+        out
     }
 
     fn mix_channel(
@@ -240,10 +265,11 @@ impl PsgAy {
         };
         let volume = AY_VOLUME_TABLE[vol_index];
 
+        // A real AY output swings between 0 and the volume level
         if signal_active {
             volume
         } else {
-            -volume
+            0.0
         }
     }
 

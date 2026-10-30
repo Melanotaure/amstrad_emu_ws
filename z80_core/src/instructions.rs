@@ -4,9 +4,9 @@ use crate::z80::*;
 // use std::io::{self, Write};
 
 enum BitOp {
-    AND,
-    XOR,
-    OR,
+    And,
+    Xor,
+    Or,
 }
 
 impl Z80 {
@@ -158,15 +158,15 @@ impl Z80 {
     fn bit_op_a_r(&mut self, bit_op: BitOp, data: u8) {
         let a = self.reg.a;
         let r = match bit_op {
-            BitOp::AND => {
+            BitOp::And => {
                 self.reg.flags.h = true;
                 a & data
             }
-            BitOp::XOR => {
+            BitOp::Xor => {
                 self.reg.flags.h = false;
                 a ^ data
             }
-            BitOp::OR => {
+            BitOp::Or => {
                 self.reg.flags.h = false;
                 a | data
             }
@@ -293,7 +293,7 @@ impl Z80 {
 
         self.reg.flags.s = self.reg.a & 0x80 != 0;
         self.reg.flags.z = self.reg.a == 0;
-        self.reg.flags.p = self.reg.a.count_ones() % 2 == 0;
+        self.reg.flags.p = self.reg.a.count_ones().is_multiple_of(2);
         self.reg.flags.b5 = self.reg.a & 0b00100000 == 0b00100000;
         self.reg.flags.b3 = self.reg.a & 0b00001000 == 0b00001000;
         self.reg.flags.alu = self.reg.flags.to_byte() != 0;
@@ -393,27 +393,26 @@ impl Z80 {
     pub fn read_hl_ix_iy<B: SystemBus>(&mut self, bus: &mut B) -> (u16, u8) {
         self.reg.flags.alu = false;
         let addr: u16;
-        let n: u8;
-        match self.p_inst {
+        let n = match self.p_inst {
             0xDD => {
                 self.reg.inc_pc();
                 let d = bus.read_memory(self.reg.pc);
                 let ix = self.reg.get_ix();
                 addr = ix.wrapping_add((d as i8) as u16);
-                n = bus.read_memory(addr);
+                bus.read_memory(addr)
             }
             0xFD => {
                 self.reg.inc_pc();
                 let d = bus.read_memory(self.reg.pc);
                 let iy = self.reg.get_iy();
                 addr = iy.wrapping_add((d as i8) as u16);
-                n = bus.read_memory(addr);
+                bus.read_memory(addr)
             }
             _ => {
                 addr = self.reg.get_hl();
-                n = bus.read_memory(addr);
+                bus.read_memory(addr)
             }
-        }
+        };
         (addr, n)
     }
 
@@ -1256,59 +1255,59 @@ impl Z80 {
             }
             0x9F => self.sbc_a_r(self.reg.a),
             // AND A, r
-            0xA0 => self.bit_op_a_r(BitOp::AND, self.reg.b),
-            0xA1 => self.bit_op_a_r(BitOp::AND, self.reg.c),
-            0xA2 => self.bit_op_a_r(BitOp::AND, self.reg.d),
-            0xA3 => self.bit_op_a_r(BitOp::AND, self.reg.e),
+            0xA0 => self.bit_op_a_r(BitOp::And, self.reg.b),
+            0xA1 => self.bit_op_a_r(BitOp::And, self.reg.c),
+            0xA2 => self.bit_op_a_r(BitOp::And, self.reg.d),
+            0xA3 => self.bit_op_a_r(BitOp::And, self.reg.e),
             0xA4 => {
                 let data = self.get_h_ixh_iyh();
-                self.bit_op_a_r(BitOp::AND, data);
+                self.bit_op_a_r(BitOp::And, data);
             }
             0xA5 => {
                 let data = self.get_l_ixl_iyl();
-                self.bit_op_a_r(BitOp::AND, data);
+                self.bit_op_a_r(BitOp::And, data);
             }
             0xA6 => {
                 let (_, data) = self.read_hl_ix_iy(bus);
-                self.bit_op_a_r(BitOp::AND, data);
+                self.bit_op_a_r(BitOp::And, data);
             }
-            0xA7 => self.bit_op_a_r(BitOp::AND, self.reg.a),
+            0xA7 => self.bit_op_a_r(BitOp::And, self.reg.a),
             // XOR A, r
-            0xA8 => self.bit_op_a_r(BitOp::XOR, self.reg.b),
-            0xA9 => self.bit_op_a_r(BitOp::XOR, self.reg.c),
-            0xAA => self.bit_op_a_r(BitOp::XOR, self.reg.d),
-            0xAB => self.bit_op_a_r(BitOp::XOR, self.reg.e),
+            0xA8 => self.bit_op_a_r(BitOp::Xor, self.reg.b),
+            0xA9 => self.bit_op_a_r(BitOp::Xor, self.reg.c),
+            0xAA => self.bit_op_a_r(BitOp::Xor, self.reg.d),
+            0xAB => self.bit_op_a_r(BitOp::Xor, self.reg.e),
             0xAC => {
                 let data = self.get_h_ixh_iyh();
-                self.bit_op_a_r(BitOp::XOR, data);
+                self.bit_op_a_r(BitOp::Xor, data);
             }
             0xAD => {
                 let data = self.get_l_ixl_iyl();
-                self.bit_op_a_r(BitOp::XOR, data);
+                self.bit_op_a_r(BitOp::Xor, data);
             }
             0xAE => {
                 let (_, data) = self.read_hl_ix_iy(bus);
-                self.bit_op_a_r(BitOp::XOR, data);
+                self.bit_op_a_r(BitOp::Xor, data);
             }
-            0xAF => self.bit_op_a_r(BitOp::XOR, self.reg.a),
+            0xAF => self.bit_op_a_r(BitOp::Xor, self.reg.a),
             // OR A, r
-            0xB0 => self.bit_op_a_r(BitOp::OR, self.reg.b),
-            0xB1 => self.bit_op_a_r(BitOp::OR, self.reg.c),
-            0xB2 => self.bit_op_a_r(BitOp::OR, self.reg.d),
-            0xB3 => self.bit_op_a_r(BitOp::OR, self.reg.e),
+            0xB0 => self.bit_op_a_r(BitOp::Or, self.reg.b),
+            0xB1 => self.bit_op_a_r(BitOp::Or, self.reg.c),
+            0xB2 => self.bit_op_a_r(BitOp::Or, self.reg.d),
+            0xB3 => self.bit_op_a_r(BitOp::Or, self.reg.e),
             0xB4 => {
                 let data = self.get_h_ixh_iyh();
-                self.bit_op_a_r(BitOp::OR, data);
+                self.bit_op_a_r(BitOp::Or, data);
             }
             0xB5 => {
                 let data = self.get_l_ixl_iyl();
-                self.bit_op_a_r(BitOp::OR, data);
+                self.bit_op_a_r(BitOp::Or, data);
             }
             0xB6 => {
                 let (_, data) = self.read_hl_ix_iy(bus);
-                self.bit_op_a_r(BitOp::OR, data);
+                self.bit_op_a_r(BitOp::Or, data);
             }
-            0xB7 => self.bit_op_a_r(BitOp::OR, self.reg.a),
+            0xB7 => self.bit_op_a_r(BitOp::Or, self.reg.a),
             // CP A, r
             0xB8 => self.cp_r(self.reg.b),
             0xB9 => self.cp_r(self.reg.c),
@@ -1343,13 +1342,13 @@ impl Z80 {
             0xE6 => {
                 self.reg.inc_pc();
                 let n = bus.read_memory(self.reg.pc);
-                self.bit_op_a_r(BitOp::AND, n);
+                self.bit_op_a_r(BitOp::And, n);
             }
             // OR A, n
             0xF6 => {
                 self.reg.inc_pc();
                 let n = bus.read_memory(self.reg.pc);
-                self.bit_op_a_r(BitOp::OR, n);
+                self.bit_op_a_r(BitOp::Or, n);
             }
             // ADC A, n
             0xCE => {
@@ -1367,7 +1366,7 @@ impl Z80 {
             0xEE => {
                 self.reg.inc_pc();
                 let n = bus.read_memory(self.reg.pc);
-                self.bit_op_a_r(BitOp::XOR, n);
+                self.bit_op_a_r(BitOp::Xor, n);
             }
             // CP A, n
             0xFE => {

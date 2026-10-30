@@ -11,6 +11,12 @@ pub struct Flags {
     pub alu: bool, // alu computed flag    : xxx x
 }
 
+impl Default for Flags {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Flags {
     pub fn new() -> Self {
         Self {

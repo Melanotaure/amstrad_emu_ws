@@ -60,6 +60,12 @@ pub struct Z80 {
     pub boot_finished: bool,
 }
 
+impl Default for Z80 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Z80 {
     pub fn new() -> Self {
         Self {

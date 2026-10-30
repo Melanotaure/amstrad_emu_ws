@@ -197,7 +197,9 @@ impl Z80 {
         let k = data as u16 + self.reg.l as u16;
         self.reg.flags.c = k > 0x00FF;
         self.reg.flags.h = self.reg.flags.c;
-        self.reg.flags.p = ((k & 0x0007) ^ self.reg.b as u16).count_ones() % 2 == 0;
+        self.reg.flags.p = ((k & 0x0007) ^ self.reg.b as u16)
+            .count_ones()
+            .is_multiple_of(2);
         self.reg.flags.alu = self.reg.get_af() & 0x00FF != 0;
     }
 

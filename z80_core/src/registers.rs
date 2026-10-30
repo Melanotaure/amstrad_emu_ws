@@ -25,6 +25,12 @@ pub struct Registers {
     pub wz: u16,
 }
 
+impl Default for Registers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Registers {
     pub fn new() -> Self {
         Self {

@@ -83,6 +83,10 @@ impl Ppi8255 {
                     self.port_c_upper_input = (data & 0x08) != 0;
                     self.port_b_input = (data & 0x02) != 0;
                     self.port_c_lower_input = (data & 0x01) != 0;
+
+                    // A real 8255 clears its output latches when the mode is set
+                    self.port_a_out = 0;
+                    self.port_c = 0;
                 } else {
                     // Port C bit set/reset Mode
                     let bit = (data >> 1) & 0x07;

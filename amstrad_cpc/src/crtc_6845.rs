@@ -60,9 +60,8 @@ impl Crtc {
         let hcc = self.hcc as u16;
 
         // 1. Current cycle signal state
-        let display_enable = !self.in_adjust
-            && self.hcc < self.registers[1]
-            && self.vcc < self.registers[6];
+        let display_enable =
+            !self.in_adjust && self.hcc < self.registers[1] && self.vcc < self.registers[6];
 
         let hsync = if r0 > 0 {
             if r2 + hsw <= r0 + 1 {
@@ -155,13 +154,12 @@ impl Crtc {
                 self.selected_register = (value & 0x1F) as usize;
                 // println!("[CRTC] Selected Register R{}", self.selected_register);
             }
-            0x01 => {
+            0x01
                 // Port 0xBDxx : Data writing
-                if self.selected_register < 18 {
+                if self.selected_register < 18 => {
                     self.registers[self.selected_register] = value;
                     // println!("[CRTC] Data writing = 0x{:02X}", value);
                 }
-            }
             _ => {
                 // Ignore the other ports (like 0xBFxx that is used for reading on some CRTC)
             }

@@ -3,6 +3,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use amstrad_cpc::dsk::DiskImage;
+use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use softbuffer::{Context, Surface};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -39,6 +40,13 @@ struct EmulatorApp {
 
     shift_held: [bool; 2],
     ctrl_held: [bool; 2],
+
+    // The menu must stay alive as long as the window
+    menu: Option<Menu>,
+    insert_disk_item: MenuItem,
+    eject_disk_item: MenuItem,
+    reset_item: MenuItem,
+    exit_item: MenuItem,
 }
 
 impl EmulatorApp {
@@ -57,6 +65,11 @@ impl EmulatorApp {
             cycles_per_sample,
             shift_held: [false; 2],
             ctrl_held: [false; 2],
+            menu: None,
+            insert_disk_item: MenuItem::new("&Insert disk...", true, None),
+            eject_disk_item: MenuItem::new("&Eject disk", true, None),
+            reset_item: MenuItem::new("&Reset", true, None),
+            exit_item: MenuItem::new("E&xit", true, None),
         }
     }
 
@@ -100,6 +113,70 @@ impl EmulatorApp {
         // Save the overflow (0, 4, 8... T-states) to keep a perfect timing
         self.cycle_remainder = cycles_this_frame - CYCLES_PER_FRAME;
     }
+
+    fn build_menu(&self) -> Menu {
+        let menu = Menu::new();
+        let file_menu = Submenu::new("&File", true);
+        file_menu.append(&self.insert_disk_item).unwrap();
+        file_menu.append(&self.eject_disk_item).unwrap();
+        file_menu.append(&PredefinedMenuItem::separator()).unwrap();
+        file_menu.append(&self.reset_item).unwrap();
+        file_menu.append(&PredefinedMenuItem::separator()).unwrap();
+        file_menu.append(&self.exit_item).unwrap();
+        menu.append(&file_menu).unwrap();
+        menu
+    }
+
+    fn insert_disk_dialog(&mut self) {
+        // The dialog is modal: the emulation is paused while it is open
+        let picked = rfd::FileDialog::new()
+            .set_title("Insert a disk image")
+            .add_filter("Amstrad disk image", &["dsk"])
+            .pick_file();
+
+        if let Some(path) = picked {
+            match path.to_str().map(DiskImage::load) {
+                Some(Ok(disk)) => self.amstrad.fdc.disk = Some(disk),
+                Some(Err(e)) => eprintln!("Unable to load the disk image: {e}"),
+                None => eprintln!("Invalid disk image path: {}", path.display()),
+            }
+        }
+
+        // Do not try to catch up the time spent in the dialog, and drop any key state
+        self.next_frame_time = Instant::now() + FRAME_DURATION;
+        self.shift_held = [false; 2];
+        self.ctrl_held = [false; 2];
+        self.amstrad.psg.keyboard_matrix = [0xFF; 10];
+    }
+
+    /// Cold reset: new CPU and new machine, the inserted disk is kept in the drive
+    fn reset(&mut self) {
+        let disk = self.amstrad.fdc.disk.take();
+
+        self.cpu = create_cpu();
+        self.amstrad = create_machine(self.audio.sample_rate);
+        self.amstrad.fdc.disk = disk;
+
+        self.cycle_remainder = 0;
+        self.audio_cycle_accumulator = 0.0;
+        self.next_frame_time = Instant::now() + FRAME_DURATION;
+        self.shift_held = [false; 2];
+        self.ctrl_held = [false; 2];
+    }
+
+    fn handle_menu_events(&mut self, event_loop: &ActiveEventLoop) {
+        while let Ok(event) = MenuEvent::receiver().try_recv() {
+            if event.id == *self.insert_disk_item.id() {
+                self.insert_disk_dialog();
+            } else if event.id == *self.eject_disk_item.id() {
+                self.amstrad.fdc.disk = None;
+            } else if event.id == *self.reset_item.id() {
+                self.reset();
+            } else if event.id == *self.exit_item.id() {
+                event_loop.exit();
+            }
+        }
+    }
 }
 
 impl ApplicationHandler for EmulatorApp {
@@ -125,6 +202,23 @@ impl ApplicationHandler for EmulatorApp {
                     NonZeroU32::new(DISPLAY_HEIGHT).unwrap(),
                 )
                 .unwrap();
+
+            // Windows only: attach the menu bar to the native window
+            #[cfg(target_os = "windows")]
+            {
+                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+                let menu = self.build_menu();
+                if let Ok(handle) = window.window_handle() {
+                    if let RawWindowHandle::Win32(h) = handle.as_raw() {
+                        unsafe { menu.init_for_hwnd(h.hwnd.get()).unwrap() };
+                    }
+                }
+                self.menu = Some(menu);
+
+                // The menu bar takes some room: ask again for the full client area
+                let _ = window.request_inner_size(PhysicalSize::new(DISPLAY_WIDTH, DISPLAY_HEIGHT));
+            }
 
             self.window = Some(window);
             self.surface = Some(surface);
@@ -161,12 +255,12 @@ impl ApplicationHandler for EmulatorApp {
 
                 let is_pressed = state == ElementState::Pressed;
                 match keycode {
-                    KeyCode::ShiftLeft | KeyCode::ShiftRight => self.shift_held[
-                        (keycode == KeyCode::ShiftRight) as usize
-                    ] = is_pressed,
-                    KeyCode::ControlLeft | KeyCode::ControlRight => self.ctrl_held[
-                        (keycode == KeyCode::ControlRight) as usize
-                    ] = is_pressed,
+                    KeyCode::ShiftLeft | KeyCode::ShiftRight => {
+                        self.shift_held[(keycode == KeyCode::ShiftRight) as usize] = is_pressed
+                    }
+                    KeyCode::ControlLeft | KeyCode::ControlRight => {
+                        self.ctrl_held[(keycode == KeyCode::ControlRight) as usize] = is_pressed
+                    }
                     _ => {}
                 }
 
@@ -216,6 +310,8 @@ impl ApplicationHandler for EmulatorApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.handle_menu_events(event_loop);
+
         let now = Instant::now();
 
         if now >= self.next_frame_time {
@@ -236,10 +332,9 @@ impl ApplicationHandler for EmulatorApp {
     }
 }
 
-fn main() {
-    let audio = AudioSystem::new();
-
-    let mut amstrad = AmstradCpc6128::new(audio.sample_rate);
+/// Builds a powered-on CPC with its ROMs, as after a cold start (no disk inserted)
+fn create_machine(sample_rate: f32) -> AmstradCpc6128 {
+    let mut amstrad = AmstradCpc6128::new(sample_rate);
     amstrad
         .memory
         .load_lower_rom("amstrad_cpc/roms/os6128.rom")
@@ -252,17 +347,21 @@ fn main() {
         .memory
         .load_upper_rom(7, "amstrad_cpc/roms/amsdos.rom")
         .expect("AMSDOS ROM not found");
+    amstrad
+}
 
-    amstrad.fdc.disk = match DiskImage::load("amstrad_cpc/roms/FruityFrank.dsk") {
-        Ok(disk) => Some(disk),
-        Err(e) => {
-            eprintln!("Unable to load the disk image: {e}");
-            None
-        }
-    };
-
+fn create_cpu() -> Z80 {
     let mut cpu = Z80::new();
     cpu.trace_enabled = true; // Needed by the F12 trace dump
+    cpu
+}
+
+fn main() {
+    let audio = AudioSystem::new();
+
+    let amstrad = create_machine(audio.sample_rate);
+
+    let cpu = create_cpu();
 
     let event_loop = EventLoop::new().expect("Can't init EventLoop");
     let mut app = EmulatorApp::new(cpu, amstrad, audio);

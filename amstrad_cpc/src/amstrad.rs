@@ -206,7 +206,6 @@ impl SystemBus for AmstradCpc6128 {
                 //println!("[FDC OUT] Write DATA = 0x{:02X}", data);
                 self.fdc.write_data(data);
             }
-            return;
         }
     }
 }
