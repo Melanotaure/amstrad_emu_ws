@@ -128,10 +128,9 @@ impl Z80 {
             return 0;
         }
 
-        if !self.n_halt {
-            self.n_halt = true;
-            self.reg.inc_pc();
-        }
+        // While halted, PC already points to the instruction following HALT
+        // (the HALT handler cancels the usual PC increment), so it is left as is
+        self.n_halt = true;
 
         self.iff1 = false;
         self.iff2 = false;
