@@ -1,5 +1,11 @@
 # Workspace for my Amstrad CPC emulator
 
+| <img width="320" height="242" alt="image" src="https://github.com/user-attachments/assets/a64cf44b-fef3-410c-96f9-e7f607bb8d6e" /> | <img width="384" height="320" alt="image" src="https://github.com/user-attachments/assets/5ce4ad5d-3217-4742-94fa-145b9c501e30" /> |
+| :---: | :---: |
+| *Original computer image* | *My emulator window* |
+
+
+
 In this Workspace you'll find (in crates):
 - cpc-core
 - cpc-desktop
