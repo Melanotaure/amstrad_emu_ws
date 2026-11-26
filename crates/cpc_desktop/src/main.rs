@@ -2,7 +2,7 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use amstrad_cpc::dsk::DiskImage;
+use cpc_core::dsk::DiskImage;
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use softbuffer::{Context, Surface};
 use winit::application::ApplicationHandler;
@@ -12,10 +12,10 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
-use amstrad_cpc::amstrad::AmstradCpc6128;
-use amstrad_cpc::audio::AudioSystem;
-use amstrad_cpc::keyboard::map_key_to_matrix;
-use amstrad_cpc::video::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use cpc_core::amstrad::AmstradCpc6128;
+use cpc_core::video::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use cpc_desktop::audio::AudioSystem;
+use cpc_desktop::keyboard::map_key_to_matrix;
 use z80_core::z80::*;
 
 const CYCLES_PER_FRAME: u32 = 79_872; // 4 MHz / 50 Hz (Image Rate for PAL standard)
@@ -337,15 +337,15 @@ fn create_machine(sample_rate: f32) -> AmstradCpc6128 {
     let mut amstrad = AmstradCpc6128::new(sample_rate);
     amstrad
         .memory
-        .load_lower_rom("amstrad_cpc/roms/os6128.rom")
+        .load_lower_rom("crates/cpc_desktop/roms/os6128.rom")
         .expect("OS ROM not found");
     amstrad
         .memory
-        .load_upper_rom(0, "amstrad_cpc/roms/basic6128.rom")
+        .load_upper_rom(0, "crates/cpc_desktop/roms/basic6128.rom")
         .expect("BASIC ROM not found");
     amstrad
         .memory
-        .load_upper_rom(7, "amstrad_cpc/roms/amsdos.rom")
+        .load_upper_rom(7, "crates/cpc_desktop/roms/amsdos.rom")
         .expect("AMSDOS ROM not found");
     amstrad
 }

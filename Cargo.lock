@@ -69,19 +69,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "amstrad-cpc"
-version = "0.1.0"
-dependencies = [
- "cpal",
- "muda",
- "rfd",
- "ringbuf",
- "softbuffer",
- "winit",
- "z80-core",
-]
-
-[[package]]
 name = "android-activity"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -450,6 +437,34 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "windows",
+]
+
+[[package]]
+name = "cpc-core"
+version = "0.1.0"
+dependencies = [
+ "z80-core",
+]
+
+[[package]]
+name = "cpc-desktop"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "cpc-core",
+ "muda",
+ "rfd",
+ "ringbuf",
+ "softbuffer",
+ "winit",
+ "z80-core",
+]
+
+[[package]]
+name = "cpc-web"
+version = "0.1.0"
+dependencies = [
+ "cpc-core",
 ]
 
 [[package]]

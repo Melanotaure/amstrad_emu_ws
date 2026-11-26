@@ -1,0 +1,14 @@
+[package]
+name = "cpc-desktop"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cpal = "0.15"
+muda = "0.21.2"
+rfd = "0.17.2"
+ringbuf = "0.3"
+softbuffer = "0.4.8"
+winit = "0.30.13"
+cpc-core = { path = "../cpc_core" }
+z80-core = { path = "../z80_core" }

@@ -1,5 +1,23 @@
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
-members = ["z80_core", "amstrad_cpc"]
+# Use the modern dependencies resolver (mandatory for workspaces)
 resolver = "2"
+
+members = [
+    "crates/z80_core",
+    "crates/cpc_core",
+    "crates/cpc_desktop",
+    "crates/cpc_web",
+]
+
+[profile.dev]
+opt-level = 1 # slight optimization in dev to keep a smooth emulated CPU
+
+[profile.release]
+# Important for the emulator performances and the WASM size
+opt-level = 3     # Max opt for speed rather than the size
+lto = true        # Link-Time Optimization (reduce the size and improves the perf)
+codegen-units = 1 # Improves LTO at the cost of a longer compile time
+panic = "abort"   # Removes the stack unroll code (massively reduces the Wasm)
+strip = true      # Removes the debug symbols from the final binary
